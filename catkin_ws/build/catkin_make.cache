@@ -1,0 +1,2 @@
+beginner_tutorials:learning_tf2:tangent_bug
+-DCATKIN_DEVEL_PREFIX=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/devel -DCMAKE_INSTALL_PREFIX=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/install -G Unix Makefiles
