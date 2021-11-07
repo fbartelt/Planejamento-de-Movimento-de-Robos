@@ -136,6 +136,10 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+.vscode
 
+!catkin_ws/*
+catkin_ws/.vscode
 Apostila*.pdf
 (Intelligent*.pdf
+Mark W*.pdf

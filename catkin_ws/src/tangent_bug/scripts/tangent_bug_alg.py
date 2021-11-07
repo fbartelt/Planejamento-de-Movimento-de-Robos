@@ -17,8 +17,10 @@ err = 0.3
 laser_range_min = 0
 laser_range_max = np.inf
 laser_step = 0
+laser_ang_min = 0
 pub = None
 br = None
+ranges_ = []
 counter = 0
 
 Kp = 1
@@ -27,10 +29,11 @@ Vmax = 5
 
 def get_laser_params(data):
     """Sets global laser parameters."""
-    global laser_range_min, laser_range_max, laser_step
+    global laser_range_min, laser_range_max, laser_step, laser_ang_min
     laser_range_min = data.range_min
     laser_range_max = data.range_max
     laser_step = data.angle_increment
+    laser_ang_min = data.angle_min
 
 def angle2goal(x_goal, y_goal):
     """Computes the angle to reach the goal in respect to world coords.
@@ -38,7 +41,8 @@ def angle2goal(x_goal, y_goal):
     """
     ang = math.atan2(y_goal - pos.y, x_goal - pos.x) - theta
     # get angle in [-pi, pi)
-    ang = np.rad2deg((ang + np.pi) % (2 * np.pi) - np.pi)
+    ang = (ang + np.pi) % (2 * np.pi) - np.pi
+    #rospy.loginfo('ang2g '+str(ang+theta)+' theta:'+str(theta))
     
     return ang
 
@@ -46,11 +50,20 @@ def range2cart(ranges, idx):
     """Returns cartesian coord of Scan measurement in respect to world
     frame.
     """
-    x = pos.x + ranges[idx] * np.cos(laser_step * idx + laser_range_min)
-    y = pos.y + ranges[idx] * np.sin(laser_step * idx + laser_range_min)
-    cart = np.array([x, y])
+    #x = pos.x + ranges[idx] * np.cos(laser_step * idx + laser_range_min)
+    #y = pos.y + ranges[idx] * np.sin(laser_step * idx + laser_range_min)
+    T0r = np.array([
+                    [np.cos(theta), -np.sin(theta), 0, pos.x],
+                    [np.sin(theta), np.cos(theta), 0, pos.y],
+                    [0, 0, 1, 0],
+                    [0, 0, 0, 1]
+                   ])
+    rangex_robot = ranges[idx] * np.cos(laser_step * idx + laser_ang_min)
+    rangey_robot = ranges[idx] * np.sin(laser_step * idx + laser_ang_min)
+    range_robot = np.array([rangex_robot, rangey_robot, 1, 1]).reshape(-1, 1)
+    range_world = (T0r @ range_robot).ravel()
     
-    return cart
+    return range_world[:2]
 
 def find_continuities(ranges):
     """ Returns a list of continuities intervals (min, max) for each
@@ -71,6 +84,7 @@ def find_continuities(ranges):
     """
     # Get indices where laser range < range_max
     cont_indx = np.nonzero(np.array(ranges) < laser_range_max)[0]
+    #rospy.loginfo('tt: '+str(laser_range_max))
     # Get superior and inferior limits of continuities
     lim_sup = np.array([x for i, x in enumerate(cont_indx) 
                         if (x + 1 != cont_indx[(i + 1) % len(cont_indx)])])
@@ -105,17 +119,17 @@ def check_blocking_oi(cont_idx, x_goal, y_goal):
     """
     ang2g = angle2goal(x_goal, y_goal)
     reg_num = None
+    blocking = False
 
     for i, region in enumerate(cont_idx):
-        lim_inf = laser_step * region[0] - theta
-        lim_sup = laser_step * region[1] - theta
-
+        lim_inf = laser_step * region[0] - theta + laser_ang_min
+        lim_sup = laser_step * region[1] - theta + laser_ang_min
+        #rospy.loginfo('i='+str(i)+' '+str(lim_inf)+' '+str(ang2g)+' '+' '+str(lim_sup))
+        #rospy.loginfo('reg '+str(cont_idx))
         if lim_inf <= ang2g <= lim_sup:
             blocking = True
             reg_num = i
             break
-        else:
-            blocking = False
 
     return blocking, reg_num
 
@@ -138,7 +152,7 @@ def get_oi_coord(ranges, cont_idx_list):
     """
     oi_mat = np.empty((len(cont_idx_list), 2))
     for i, x in enumerate(cont_idx_list):
-        oi_mat[i, :] = range2cart(ranges, x)
+        oi_mat[i, :] = range2cart(ranges, int(x))
 
     return oi_mat
 
@@ -146,7 +160,12 @@ def choose_oi(ranges, cont_idx, x_goal, y_goal):
     #TODO check if its ok
     pos_vec = np.array([pos.x, pos.y])
     goal_vec = np.array([x_goal, y_goal])
-    cont_idx_list = [x for t in cont_idx for x in t]
+
+    if isinstance(cont_idx, tuple):
+        cont_idx_list = list(cont_idx)
+    else:
+        cont_idx_list = [x for t in cont_idx for x in t]
+
     oi_mat = get_oi_coord(ranges, cont_idx_list)
     dist_pos2oi = np.linalg.norm((pos_vec - oi_mat), axis=1)
     dist_oi2goal = np.linalg.norm((goal_vec - oi_mat), axis=1)
@@ -176,22 +195,24 @@ def traj_controller(x_goal, y_goal, vx=0, vy=0):
     return v, w
 
 def callback_scan(data):
-    if counter == 0:
+    global ranges_
+    #rospy.loginfo(str(counter))
+    if counter < 10:
         get_laser_params(data)
-    
-    goal_angle = angle2goal()
-    regions = {
-        '0' : min(data.ranges[0:143]),
-        '1' : min(data.ranges[144:287]),
-        '2' : min(data.ranges[288:431]),
-        '3' : min(data.ranges[432:575]),
-        '4' : min(data.ranges[576:719]),
-        '5' : min(data.ranges[720:863]),
-        '6' : min(data.ranges[864:1007]),
-        '7' : min(data.ranges[1008:1151]),
-        '8' : min(data.ranges[1152:1295]),
-        '9' : min(data.ranges[1296:1439]),
-    }
+    ranges_ = data.ranges
+    #goal_angle = angle2goal()
+    #regions = {
+    #    '0' : min(data.ranges[0:143]),
+    #    '1' : min(data.ranges[144:287]),
+    #    '2' : min(data.ranges[288:431]),
+    #    '3' : min(data.ranges[432:575]),
+    #    '4' : min(data.ranges[576:719]),
+    #    '5' : min(data.ranges[720:863]),
+    #    '6' : min(data.ranges[864:1007]),
+    #    '7' : min(data.ranges[1008:1151]),
+    #    '8' : min(data.ranges[1152:1295]),
+    #    '9' : min(data.ranges[1296:1439]),
+    #}
     #rospy.loginfo(regions)
 
 def callback_pose(data):
@@ -252,11 +273,27 @@ def boundary_following():
     return twist_msg
 
 def set_goal(data, args):
+    #TODO check if possible to add goal on Stage in runtime
     odom = data
     odom.pose.pose.position.x = args[0]
     odom.pose.pose.position.y = args[1]
     pub_goal = rospy.Publisher('/robot_1/base_pose_ground_truth', Odometry, queue_size=1)
     pub_goal.publish(odom)
+
+def dummy(x_goal, y_goal):
+    cont_idx = find_continuities(ranges_)
+    blocking, reg_num = check_blocking_oi(cont_idx, x_goal, y_goal)
+    
+    if blocking:
+        rospy.loginfo('Blocked by '+str(cont_idx[reg_num]))
+        oi = choose_oi(ranges_, cont_idx[reg_num], x_goal, y_goal)
+        rospy.loginfo('coords: '+str(oi))
+        v, w = traj_controller(oi[0], oi[1])
+    else:
+        rospy.loginfo('FREE')
+        v, w = traj_controller(x_goal, y_goal)
+    return v, w
+
 
 def run(x_goal, y_goal):
     global pub, br, counter
@@ -273,7 +310,8 @@ def run(x_goal, y_goal):
     pos_sub = rospy.Subscriber('robot_0/base_pose_ground_truth', Odometry, callback_pose)
     rate = rospy.Rate(20)
     while not rospy.is_shutdown():
-        v, w = traj_controller(x_goal, y_goal, 0, 0)
+        #v, w = traj_controller(x_goal, y_goal, 0, 0)
+        v, w = dummy(x_goal, y_goal)
         twist.linear.x = v
         twist.angular.z = w
         pub.publish(twist)
@@ -288,6 +326,7 @@ def run(x_goal, y_goal):
         counter += 1
         #rospy.loginfo(f'{x_goal}, {y_goal}')
         #br.sendTransform(t)
+        rate.sleep()
 
 
 if __name__ == '__main__':

@@ -13,8 +13,8 @@ define topurg ranger
 define robot1 position
 (
     size [0.550 0.550 0.250]
-    origin [-0.050 0.000 0.000 0.000]
+    origin [0 0.000 0.000 0.000]
     gui_nose 1
     drive "diff"
-    topurg(pose [0.050 0.000 0.000 0.000])
+    topurg(pose [0.0 0.000 0.000 0.000])
 )

@@ -9,8 +9,8 @@ resolution 0.02
 # configure the GUI window
 window
 (
-  size [ 635.000 666.000 ] # in pixels
-  scale 36.995   # pixels per meter
+  size [ 450 450 ] # in pixels
+  scale 28.125   # pixels per meter
   center [ -0.040  -0.274 ]
   rotate [ 0  0 ]
   show_footprints 1
@@ -24,7 +24,7 @@ window
 floorplan
 ( 
   name "cave"
-  size [16.000 16.000 0.800]
+  size [16 16 0.800]
   pose [0 0 0 0]
   bitmap "cave.png"
 )
@@ -32,7 +32,7 @@ floorplan
 robot1
 (
       name "robot1"
-      pose [-5 -6 0.000 45]
+      pose [-5 -5 0.000 0]
       color "green"
 )
 
