@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from typing import Counter
 import rospy
 import tf2_ros as tf2
 #import tf_conversions
@@ -23,8 +24,11 @@ laser_range_min = 0
 laser_range_max = np.inf
 laser_step = 0
 laser_ang_min = 0
+laser_ang_max = 0
 
 pos = gmsg.Point()
+pos.x = np.inf # guarantees no instant end of path planning
+pos.y = np.inf
 pub = None
 br = None
 ranges_ = []
@@ -38,10 +42,12 @@ states = {0 : 'Motion to Goal', 1 : 'Boundary Following', 2 : 'Reached Goal'}
 def get_laser_params(data):
     """Sets global laser parameters."""
     global laser_range_min, laser_range_max, laser_step, laser_ang_min
+    global laser_ang_max
     laser_range_min = data.range_min
     laser_range_max = data.range_max
     laser_step = data.angle_increment
     laser_ang_min = data.angle_min
+    laser_ang_max = data.angle_max
 
 def angle2goal(x_goal, y_goal):
     """Computes the angle to reach the goal in respect to world coords.
@@ -195,10 +201,10 @@ def choose_oi(ranges, cont_idx, x_goal, y_goal):
     dist_pos2oi = np.linalg.norm((pos_vec - oi_mat), axis=1)
     dist_oi2goal = np.linalg.norm((goal_vec - oi_mat), axis=1)
     heuristic = dist_pos2oi + dist_oi2goal
-    d_reach = heuristic
     oi2follow = np.argmin(heuristic)
+    d_reach = dist_oi2goal[oi2follow]
     oi2follow_coord = oi_mat[oi2follow, :]
-    
+
     return oi2follow_coord
 
     
@@ -262,26 +268,6 @@ def change_state(n):
     print(f'stage changedd from{state} to {n}')
     state = n
 
-def rotate(x_goal, y_goal):
-    global theta, pub, err, state
-    theta_des = math.atan2(y_goal - pos.y, x_goal - pos.x)
-    err_theta = theta_des - theta
-    twist_msg = gmsg.Twist()
-    if math.fabs(err_theta) > math.pi/90:
-        twist_msg.angular.z = 0.7 if err_theta > 0 else -0.7
-    else:
-        change_state(1)
-    pub.publish(twist_msg)
-    return twist_msg
-
-def boundary_following():
-    global pub
-    twist_msg = gmsg.Twist()
-    twist_msg.linear.x = 0
-    twist_msg.angular.z = 0
-    pub.publish(twist_msg)
-    return twist_msg
-
 def set_goal(data, args):
     #TODO check if possible to add goal on Stage in runtime
     odom = data
@@ -317,30 +303,67 @@ def motion2goal(x_goal, y_goal):
         The angular velocity given by feedback linearization
     """
     #TODO improve blocking check
+    global d_followed
     cont_idx = find_continuities(ranges_)
     blocking, reg_num = check_blocking_oi(cont_idx, x_goal, y_goal)
     
     if blocking:
         rospy.loginfo('Blocked by '+str(cont_idx[reg_num]))
+        d_reach_old = d_reach
         oi = choose_oi(ranges_, cont_idx[reg_num], x_goal, y_goal)
         #rospy.loginfo('coords: '+str(oi))
-        oi = safety_distance(oi)
+        oi_safe = safety_distance(oi)
         #rospy.loginfo('safe: '+str(oi))
-        v, w = traj_controller(oi[0], oi[1])
+        v, w = traj_controller(oi_safe[0], oi_safe[1])
+        if np.linalg.norm(([x_goal, y_goal] - oi)) > d_rob2goal:
+            d_followed = d_reach_old
+            change_state(1)
+            rospy.loginfo('Changed to State 1 ' + states[state])
     else:
         rospy.loginfo('FREE')
         v, w = traj_controller(x_goal, y_goal)
     return v, w
 
+def boundary_following():
+    global d_followed
+    #Derivative of euclidean norm |x| = x/|x|
+    cont_lims = find_continuities(ranges_)
+    closest_oi = choose_oi(ranges_, cont_lims, pos.x, pos.y)
+    D = np.linalg.norm(closest_oi - [pos.x, pos.y])
+    G = D - wstar
+    DyG = (closest_oi[0] - pos.x) / D
+    x_new = pos.x - 1/(DyG) * G
+    y_new = pos.y + np.abs(np.sqrt(-pos.x**2 + 2 * pos.x * x_new + wstar**2 
+                                   - x_new**2)) * np.sign(closest_oi[1])
+    v, w = traj_controller(x_new, y_new)
+    if d_reach < d_followed:
+        d_followed = d_reach
+        change_state(0)
+        rospy.loginfo('Changed to State 0 ' + states[state])
+
+    #total_lasers = (laser_ang_max - laser_ang_min) // laser_step
+    #right = (-1) ** (last_sensed > total_lasers // 2)
+    #margin = right * total_lasers // 8
+    #cont_list = [x for t in cont_lims for x in t]
+    #for region in cont_lims:
+    #    lim_inf, lim_sup = region
+    #    if right == 1:
+    #        if last_sensed <= lim_inf <= last_sensed + margin:
+    #            oi_coord = get_oi_coord()
+    #    else:
+    #        if last_sensed + margin <= lim_sup <= last_sensed:
+    #            oi_coord = get_oi_coord()
+    return v, w
 
 def run(x_goal, y_goal):
-    global pub, br, counter, state
+    global pub, br, counter
     br = tf2.TransformBroadcaster()
     t = gmsg.TransformStamped()
     twist = gmsg.Twist()
     rospy.init_node('tangent_bug', anonymous=True)
     #t.header.stamp = rospy.Time.now()
-    t.header.frame_id = "ZaWarudo"
+    #t.header.frame_id = "ZaWarudo"
+    #t.child_frame_id = 'robot_0'
     pub = rospy.Publisher('robot_0/cmd_vel', gmsg.Twist, queue_size=1)
     #goal_sub = rospy.Subscriber('robot_1/odom', Odometry, set_goal, (x_goal, y_goal))
     #goal_sub.unregister()
@@ -349,7 +372,7 @@ def run(x_goal, y_goal):
     rate = rospy.Rate(20)
     while not rospy.is_shutdown():
         if np.linalg.norm([pos.x - x_goal, pos.y - y_goal]) < err and state != 2:
-            state = 2
+            change_state(2)
             rospy.loginfo('!! '+ states[state] +'!!')
         if state == 0:
             v, w = motion2goal(x_goal, y_goal)
@@ -357,7 +380,10 @@ def run(x_goal, y_goal):
             twist.angular.z = w
             pub.publish(twist)
         elif state == 1:
-            pass
+            v,w = boundary_following()
+            twist.linear.x = v
+            twist.angular.z = w
+            pub.publish(twist)
 
         #t.transform.translation = twist.linear
         #t.transform.rotation = quaternion_from_euler(twist.angular.x, twist.angular.y, twist.angular.z)

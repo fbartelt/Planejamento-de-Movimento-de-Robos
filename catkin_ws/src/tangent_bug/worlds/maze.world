@@ -10,7 +10,7 @@ resolution 0.02
 window
 (
   size [ 450 450 ] # in pixels
-  scale 28.125   # pixels per meter
+  scale 28   # pixels per meter
   center [ -0.040  -0.274 ]
   rotate [ 0  0 ]
   show_footprints 1
@@ -23,24 +23,24 @@ window
 # load an environment bitmap
 floorplan
 ( 
-  name "cave"
+  name "easy"
   size [16 16 0.800]
   pose [0 0 0 0]
-  bitmap "cave.png"
   obstacle_return 0
+  bitmap "maze.png"
 )
 
 robot1
 (
       name "robot1"
-      pose [-5 -5 0.000 0]
+      pose [-6 2 0.000 0]
       color "green"
 )
 
 goal
 (
     name "goal"
-    pose [7 7 0.000 0]
+    pose [4 2 0.000 0]
     color "orange"
 )
 
