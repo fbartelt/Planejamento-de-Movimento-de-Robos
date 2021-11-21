@@ -1,7 +1,7 @@
 define topurg ranger
 (
     sensor(
-        range [0.0 5.0]
+        range [0.0 2.0]
         fov 360
         samples 1440
     )
