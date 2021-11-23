@@ -10,11 +10,12 @@ from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import math
 import numpy as np
+import pandas as pd
 
 #User defined
 theta = 0.001 #Angle about z axis
 err = 0.3 #Position tolerance in meters
-wstar = 0.8 #Safety distance W*
+wstar = 0.3 #Safety distance W*
 Kp = 1 #Controller proportional gain
 d = 0.8 #For feedback linearization
 Vmax = 5 #Max velocity for the robot
@@ -192,6 +193,9 @@ def approximate_boundary(coords, lims, N_points = 1000):
     """
     M = np.zeros((6,6))
     coord_std = np.std(coords, axis=0)
+    if np.count_nonzero(coord_std) != 2:
+        idx = np.nonzero(coord_std == 0)
+        coord_std[idx] = 1
     coord_mean = np.mean(coords, axis=0)
     coords = (coords - coord_mean) / coord_std
 
@@ -278,11 +282,26 @@ def get_tangent_vector(region):
             [np.cos(np.pi/2), -np.sin(np.pi/2)],
             [np.sin(np.pi/2), np.cos(np.pi/2)]
         ])
+    rospy.loginfo('reg: '+str(region))
+    rospy.loginfo(str(pos))
+    #rospy.loginfo('mat: '+str(reg_idx))
+    df = pd.DataFrame(obstacle)
+    df.to_csv('./debug.csv')
+    df2 = pd.DataFrame(oi_mat)
+    df2.to_csv('./debugmat.csv')
     #rospy.loginfo('grad '+str(grad_aprox))
     tangent_vec = (rot90 @ (grad_aprox / norm_grad).reshape(-1, 1)).ravel()
+    rospy.loginfo('tangent: '+str(tangent_vec))
     #rospy.loginfo('min_dst '+str(min_dist_idx)+'  '+str(dist_obstacle2robot[min_dist_idx]))
-    tangent_vec = obstacle[min_dist_idx] + tangent_vec.T
+    
+    #### DEACTIVATE THIS:VVV
+    #tangent_vec = obstacle[min_dist_idx] + tangent_vec.T
+
+    rospy.loginfo('go to: '+str(tangent_vec))
+    #safet = safety_distance(tangent_vec)
+    #rospy.loginfo('safety: '+str(safet))
     #rospy.loginfo('tan1 '+str(tangent_vec))
+    a = input('DEBUG ')
 
     return tangent_vec, obstacle[min_dist_idx]
 
@@ -327,7 +346,8 @@ def choose_oi(ranges, cont_idx, x_goal, y_goal):
         oi2follow_coord = tangent
         #rospy.loginfo('tan'+str(oi2follow_coord.shape)+str(oi2follow_coord))
     else:
-        oi2follow_coord = safety_distance(oi_mat[oi2follow, :])
+        oi2follow_coord = oi_mat[oi2follow, :]
+        #oi2follow_coord = safety_distance(oi_mat[oi2follow, :])
         d_reach = np.linalg.norm(goal_vec - oi2follow_coord)
 
     if d_reach <= d_followed:
@@ -445,7 +465,7 @@ def motion2goal(x_goal, y_goal):
 
         if np.linalg.norm(([x_goal, y_goal] - oi_safe)) > d_rob2goal:
             #d_followed = d_reach_old
-            #change_state(1)
+            change_state(1)
             rospy.loginfo('Changed to State 1 ' + states[state])
     else:
         #rospy.loginfo('FREE')
@@ -456,7 +476,7 @@ def boundary_following(x_goal, y_goal):
     global d_followed
     #Derivative of euclidean norm |x| = x/|x|
     cont_lims = find_continuities(ranges_)
-    rospy.loginfo('pos: '+str(pos.x)+' '+str(pos.y))
+    #rospy.loginfo('pos: '+str(pos.x)+' '+str(pos.y))
     closest_oi = choose_oi(ranges_, cont_lims, x_goal, y_goal)
     #grad_aprox = closest_oi - [pos.x, pos.y]
     #norm_grad = np.linalg.norm(grad_aprox)
@@ -467,17 +487,17 @@ def boundary_following(x_goal, y_goal):
     #    ])
     #tangent_vec = rot90 @ (np.r_[grad_aprox / norm_grad, 0]).reshape(-1, 1)
     oi = safety_distance(closest_oi)
-    rospy.loginfo('closest oi: '+str(closest_oi))
-    rospy.loginfo('TEST: '+str(oi))
+    #rospy.loginfo('closest oi: '+str(closest_oi))
+    #rospy.loginfo('TEST: '+str(oi))
     x_new = oi[0]
     y_new = oi[1]
-    #D = np.linalg.norm(closest_oi - [pos.x, pos.y])
-    #G = D - wstar
-    #DyG = (-closest_oi[0] + pos.x) / D
-    #x_new = pos.x - 1/(DyG) * G
-    #y_new = pos.y + np.abs(np.sqrt(-pos.x**2 + 2 * pos.x * x_new + wstar**2 
-    #                               - x_new**2 + 0j)) * np.sign(closest_oi[1])
-    rospy.loginfo('oi: '+str(x_new)+' '+str(y_new))
+    D = np.linalg.norm(closest_oi - [pos.x, pos.y])
+    G = D - wstar
+    DyG = (-closest_oi[0] + pos.x) / D
+    x_new = pos.x - 1/(DyG) * G
+    y_new = pos.y + np.abs(np.sqrt(-pos.x**2 + 2 * pos.x * x_new + wstar**2 
+                                   - x_new**2 + 0j)) * np.sign(closest_oi[1])
+    rospy.loginfo('posnew: '+str(x_new)+' '+str(y_new))
     #rospy.loginfo('d_reach: '+str(d_reach)+' d_followd: '+str(d_followed))
     v, w = traj_controller(x_new, y_new)
     if d_reach <= d_followed:
