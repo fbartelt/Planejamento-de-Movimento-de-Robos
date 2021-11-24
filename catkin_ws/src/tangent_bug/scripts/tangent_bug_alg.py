@@ -15,7 +15,7 @@ import pandas as pd
 #User defined
 theta = 0.001 #Angle about z axis
 err = 0.3 #Position tolerance in meters
-wstar = 0.3 #Safety distance W*
+wstar = 0.8 #Safety distance W*
 Kp = 1 #Controller proportional gain
 d = 0.8 #For feedback linearization
 Vmax = 5 #Max velocity for the robot
@@ -416,12 +416,16 @@ def safety_distance(oi_coord):
     rospy.loginfo('oi___:' + str(oi_coord))
     #oi_safe = (np.abs(oi_coord) - 0.5) * np.sign(oi_coord)
     
-    #vec_robot2oi = oi_coord - [pos.x, pos.y]
-    vec_robot2oi = oi_coord
+    vec_robot2oi = oi_coord - [pos.x, pos.y]
+    #vec_robot2oi = oi_coord
     oi_dist = np.linalg.norm(vec_robot2oi)
+    if oi_dist == 0:
+        oi_dist = 1e-3
+    rospy.loginfo('dist__: '+str(oi_dist))
     oi_norm = vec_robot2oi / oi_dist
     #oi_safe = (oi_dist - 1.2*wstar) * oi_norm + [pos.x, pos.y]
-    oi_safe = (oi_dist + wstar) * oi_norm
+    #oi_safe = (oi_dist + wstar) * oi_norm # CHANGED THIS
+    oi_safe = oi_coord - (wstar * oi_norm)
     #rospy.loginfo('oi: '+str(oi_coord))
     #rospy.loginfo('distdist: '+str(oi_dist))
     #rospy.loginfo('vec: '+str(vec_robot2oi))
@@ -458,8 +462,8 @@ def motion2goal(x_goal, y_goal):
         d_reach_old = d_reach
         oi = choose_oi(ranges_, cont_idx[reg_num], x_goal, y_goal)
         #rospy.loginfo('coords: '+str(oi))
-        #oi_safe = safety_distance(oi)
-        oi_safe = oi
+        oi_safe = safety_distance(oi)
+        #oi_safe = oi
         #rospy.loginfo('safe: '+str(oi))
         v, w = traj_controller(oi_safe[0], oi_safe[1])
 
