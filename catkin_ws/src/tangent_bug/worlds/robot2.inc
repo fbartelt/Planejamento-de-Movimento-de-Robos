@@ -1,7 +1,7 @@
 define topurg ranger
 (
     sensor(
-        range [0.0 2.0]
+        range [0.0 3.0]
         fov 360
         samples 1440
     )
@@ -10,7 +10,7 @@ define topurg ranger
     size [0.050 0.050 0.100]
 )
 
-define robot1 position
+define robot2 position
 (
     size [0.550 0.550 0.250]
     origin [0 0.000 0.000 0.000]

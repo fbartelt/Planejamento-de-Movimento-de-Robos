@@ -1,0 +1,46 @@
+include "map1.inc"
+include "robot2.inc"
+include "goal.inc"
+
+# spatial resolution of the underlying occupancy grid. Default is 0.02m.
+resolution 0.02
+# interval_sim 50 # simulation timestep in ms
+
+# configure the GUI window
+window
+(
+  size [ 800 800 ] # in pixels
+  scale 25   # pixels per meter
+  center [ -0.040  -0.274 ]
+  rotate [ 0  0 ]
+  show_footprints 1
+  show_grid 1
+  show_status 1
+  			
+  show_data 1              # 1=on 0=off
+)
+
+# load an environment bitmap
+floorplan
+( 
+  name "Cmaze"
+  size [32 32 0.800]
+  pose [0 0 0 0]
+  obstacle_return 0
+  bitmap "maze2.png"
+)
+
+robot2
+(
+      name "robot2"
+      pose [-6 2 0.000 0]
+      color "green"
+)
+
+goal
+(
+    name "goal"
+    pose [9 2 0.000 0]
+    color "orange"
+)
+
