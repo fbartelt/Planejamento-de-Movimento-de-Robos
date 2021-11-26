@@ -217,6 +217,7 @@ def approximate_boundary(coords, lims, N_points = 1000):
 
     if np.linalg.det(A) >= 1e-3:
         # c0 + c1*ẍ^2 + c2*ÿ^2=0
+        rospy.loginfo('elipse')
         c0 = float(a[0]- (b.T @ np.linalg.inv(A) @ b)/ 4)
         c1, c2 = D
         c_list.append([c0,c1,c2])
@@ -227,6 +228,7 @@ def approximate_boundary(coords, lims, N_points = 1000):
         p = Q @ p_ - (np.linalg.inv(A) @ b / 2)
 
     elif np.linalg.det(A) <= -1e-3:
+        rospy.loginfo('hiperbole')
         c0 = float(a[0] - (b.T @ np.linalg.inv(A) @ b)/ 4)
         c1, c2 = D
         c_list.append([c0,c1,c2])
@@ -248,18 +250,23 @@ def approximate_boundary(coords, lims, N_points = 1000):
 
     else:
         # c0+c1*ẍ + c2*ÿ + c3*ẍ^2 + c4*ÿ^2 =0
+        rospy.loginfo('parabola')
         c0 = float(a[0])
         aux = (b.T @ Q).ravel()
         c1, c2 = aux
         c3, c4 = D
         c_list.append([c0,c1,c2, c3, c4])
-        t_ = np.linspace(-20, 20, N_points)
+        #t_ = np.linspace(-20, 20, N_points)
 
         if np.abs(D[0]) < np.abs(D[1]):
-            y = t_
+            lim_inf = np.min(coords[:, 1])
+            lim_sup = np.max(coords[:, 1])
+            y = np.linspace(lim_inf - 1, lim_sup + 1, N_points)
             x = -c0/c1 - c2/c1 * y -c4/c1 * y**2
         else: 
-            x = t_
+            lim_inf = np.min(coords[:, 0])
+            lim_sup = np.max(coords[:, 0])
+            x = np.linspace(lim_inf - 1, lim_sup + 1, N_points)
             y = -c0/c2 - c1/c2 * x -c3/c2 * x**2
         p_ = np.array([x, y])
         p = Q @ p_
@@ -268,11 +275,30 @@ def approximate_boundary(coords, lims, N_points = 1000):
 
     return p.T, (w, v, a, A, D, Q, c_list)
 
+def line_approx_boundary(coords, lims, N_points = 1000):
+    lim_inf, lim_sup = lims
+    #coord_std = np.std(coords, axis=0)
+    #if np.count_nonzero(coord_std) != 2:
+    #    idx = np.nonzero(coord_std == 0)
+    #    coord_std[idx] = 1
+    #coord_mean = np.mean(coords, axis=0)
+    #coords_ = (coords - coord_mean) / coord_std
+    coefs = np.polyfit(coords[:, 0], coords[:, 1], 2)
+
+    xt = np.linspace(-9, 10, N_points)
+    xs = np.c_[xt**2, xt, np.ones(xt.shape)]
+    y = xs @ coefs.reshape(-1, 1)
+    p = np.c_[xt, y]
+    return p, (coefs, xs, y)
+
+
 def get_tangent_vector(region):
     lim_inf, lim_sup = region
     reg_idx = np.unique(np.linspace(lim_inf, lim_sup, -(-(lim_sup - lim_inf) // 2) + 1, dtype=int))
     oi_mat = get_oi_coord(reg_idx)
     obstacle, _ = approximate_boundary(oi_mat, (lim_inf, lim_sup))
+    rospy.loginfo('obt size: ' + str(obstacle.shape))
+    rospy.loginfo('obt: ' + str(obstacle))
     vec_obstacle2robot = obstacle - [pos.x, pos.y]
     dist_obstacle2robot = np.linalg.norm(vec_obstacle2robot, axis=1)
     min_dist_idx = np.argmin(dist_obstacle2robot)
@@ -371,6 +397,8 @@ def choose_oi(ranges, cont_idx, x_goal, y_goal):
         oi2follow = np.argmin(dist_pos2oi)
         tangent, closest_point = get_tangent_vector(cont_idx[int(oi2follow // 2)])
         safe_oi = safety_distance(closest_point, tangent)
+        rospy.loginfo('point: '+str(safe_oi))
+        a = input('DEBUG')
         d_reach = np.linalg.norm(goal_vec - safe_oi)
         oi2follow_coord = safe_oi
         #rospy.loginfo('tan'+str(oi2follow_coord.shape)+str(oi2follow_coord))
@@ -464,18 +492,19 @@ def safety_distance(oi_coord, tangent_vec):
     #oi_safe = (oi_dist + wstar) * oi_norm # CHANGED THIS
     #alpha = (1/((oi_dist - wstar)**2 or 2 * wstar))
     if oi_dist > 1.3*wstar:
-        alpha = 1.2
+        alpha = 4
         beta = 1
     else:
         #alpha = (1/((oi_dist - wstar) or 2 * wstar))
-        alpha = 1.2
-        beta = 1.2
+        alpha = 5
+        beta = 2/(np.linalg.norm(oi_coord) - wstar)
     #alpha = 1.2
     oi_safe = beta * (oi_coord - (wstar * oi_norm)) + alpha * tangent_vec
     #rospy.loginfo('oi: '+str(oi_coord))
     #rospy.loginfo('distdist: '+str(oi_dist))
     #rospy.loginfo('vec: '+str(vec_robot2oi))
     #rospy.loginfo('vecsafe: '+str(oi_safe))
+    rospy.loginfo('oi_not_safe_:' + str(oi_coord))
     rospy.loginfo('oi__safe_:' + str(oi_safe))
 
     return oi_safe
