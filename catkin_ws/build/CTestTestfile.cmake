@@ -7,4 +7,5 @@
 subdirs("gtest")
 subdirs("beginner_tutorials")
 subdirs("tangent_bug")
+subdirs("path_following")
 subdirs("learning_tf2")

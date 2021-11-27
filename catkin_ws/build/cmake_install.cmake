@@ -138,6 +138,7 @@ if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/gtest/cmake_install.cmake")
   include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/beginner_tutorials/cmake_install.cmake")
   include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/tangent_bug/cmake_install.cmake")
+  include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/path_following/cmake_install.cmake")
   include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/learning_tf2/cmake_install.cmake")
 
 endif()

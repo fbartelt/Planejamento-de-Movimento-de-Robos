@@ -1,0 +1,8 @@
+<launch>
+
+    <node name="Stage" pkg="stage_ros" type="stageros" args="$(find path_following)/worlds/empty.world">
+    </node>
+
+    <node pkg="path_following" type="path_following.py" name="path_following"/>
+
+</launch>
