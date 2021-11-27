@@ -375,27 +375,30 @@ def refine_tangent(tangent):
     rospy.loginfo('old tan: '+str(new_tangent))
     
     if tan_list:
-        ang_rot = 0
+        ang_rot = np.pi
         old_tan = tan_list.pop()
         rospy.loginfo('oldold tan: '+str(old_tan))
-        ango = np.arctan2(old_tan[1], old_tan[0]) + 2 * np.pi
-        angn = np.arctan2(new_tangent[1], new_tangent[0]) + 2 * np.pi
-        so, sn = np.sign(np.sin([ango, angn]))
-        co, cn = np.sign(np.cos([ango, angn]))
+        #ango = np.arctan2(old_tan[1], old_tan[0]) + 2 * np.pi
+        #angn = np.arctan2(new_tangent[1], new_tangent[0]) + 2 * np.pi
+        #so, sn = np.sign(np.sin([ango, angn]))
+        #co, cn = np.sign(np.cos([ango, angn]))
         
-        if co == cn:
-            if so != sn:
-                ang_rot = -sn * cn * (np.pi/2)
-        else:
-            if sn == so:
-                ang_rot = cn * sn * (np.pi/2)
-            else:
-                ang_rot = np.pi
+        #if co == cn:
+        #    if so != sn:
+        #        ang_rot = -sn * cn * (np.pi/2)
+        #else:
+        #    if sn == so:
+        #        ang_rot = cn * sn * (np.pi/2)
+        #    else:
+        #        ang_rot = np.pi
         rot = np.array([
             [np.cos(ang_rot), -np.sin(ang_rot)],
             [np.sin(ang_rot), np.cos(ang_rot)]
         ])
-        new_tangent = (rot @ new_tangent.reshape(-1, 1)).ravel()
+        rot_tangent = (rot @ new_tangent.reshape(-1, 1)).ravel()
+        
+        if all(np.sign(rot_tangent) == np.sign(old_tan)):
+            new_tangent = rot_tangent
         #idx = np.argmax(np.abs(tangent))
         #so = np.sign(old_tan[idx])
         #sn = np.sign(new_tangent[idx])
