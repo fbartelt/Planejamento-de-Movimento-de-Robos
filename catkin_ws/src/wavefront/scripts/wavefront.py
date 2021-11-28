@@ -21,7 +21,7 @@ height, width = (16, 16) # in meters
 scale = 28 # meters / pixel
 robot_size = (0.5, 0.5)
 goal = (5, 2)
-initial = (-6, 2)
+robot_pos0 = (-6, 2)
 
 #Laser params
 laser_range_min = 0
@@ -40,46 +40,118 @@ state = 0
 d_rob2goal = 0
 d_reach = 0
 d_followed = 0
-states = {0 : 'Motion to Goal', 1 : 'Boundary Following', 2 : 'Reached Goal'}
+states = {0 : 'Calculating Wave-Front Planner', 1 : 'Started Moving', 
+          2 : 'Reached Goal!!!', 3 : 'Impossible to reach goal'}
 
 def infinite_range(t0):
+    """A infinite generator for the <range> function. t0 represents the
+    initial value.
+    """
     num = t0
     while True:
         yield num
         num += 1
 
-def wavefront(grid, neighbor=4):
+def meters2pixels(coord):
+    """Converts coordinate in meters to pixel coordinate.
+    """
+    xm, ym = coord
+    xp = int(np.round(scale * (xm + width // 2)))
+    yp = int(np.round(scale * (-ym + height // 2)))
+    coord_pixels = (xp, yp)
+    
+    return coord_pixels
+
+def pixels2meters(coord):
+    """Converts pixels coordinate to coordinate in meters.
+    """
+    xp, yp = coord
+    xm = xp / scale - width // 2
+    ym = -yp / scale + height // 2
+    coord_meters = (xm, ym)
+    
+    return coord_meters
+
+def wavefront_planner(grid, goal, neighbors=4):
+    """ Generates wavefront grid using 4 or 8 neighbors connectivity.
+
+    Params
+    ------
+    grid: np.array
+        A matrix representing the map already expanded with robot shape
+        i.e. the configuration space representation of the map. The
+        grid must be binary, where 0s represent free space and 1s
+        represent obstacles. Rows must be x-coordinates and columns
+        their respective y-coordinates (X x Y) matrix.
+    goal: tuple
+        The goal coordinates in meters as (x, y) position.
+    neighbors: int
+        The number of point connectivity to use. Defaults to 4, if
+        any other integer is passed, 8 neighbors is assumed.
+
+    Returns
+    -------
+    wave_grid: np.array
+        The wavefront planner grid with weights assigned to each pixel.
+    """
     wave_grid = grid.copy()
-    interrupt = 0
-    rx, ry = robot_size
-    rx = scale * rx
-    ry = scale * ry
+    #interrupt = 0
+    #rx, ry = robot_size
+    robot_xp, robot_yp = meters2pixels(robot_pos0)
+    goal_xp, goal_yp = meters2pixels(goal)
+    #rx = scale * rx
+    #ry = scale * ry
     xmax, ymax = grid.shape
+    grid[goal_xp, goal_yp] = 2
+    rospy.loginfo(f'{states[state]}\n......')
     
     for i in infinite_range(2):
-        for pixel in list(zip(*np.nonzero(wave_grid == i))):
+        for pixel in zip(*np.nonzero(wave_grid == i)):
             x, y = pixel
-            if neighbor == 4:
+            if neighbors == 4:
                 # 4 neighbors
                 sub_gridx = wave_grid[np.maximum(0, x - 1) : np.minimum(xmax, x + 2), y]
                 sub_gridy = wave_grid[x, np.maximum(0, y - 1) : np.minimum(ymax, y + 2)]
-                sub_gridx[sub_gridx == 0] = i+1
-                sub_gridy[sub_gridy == 0] = i+1
+                if (np.array([sub_gridx, sub_gridy]) == 0).any():
+                    sub_gridx[sub_gridx == 0] = i+1
+                    sub_gridy[sub_gridy == 0] = i+1
+                else:
+                    change_state(3)
             else:
                 # 8 neighbors
                 sub_grid = wave_grid[np.maximum(0, x - 1) : np.minimum(xmax, x + 2),
                                      np.maximum(0, y - 1) : np.minimum(ymax, y + 2)]
-                sub_grid[sub_grid == 0] = i+1
+                if (sub_grid == 0).any():
+                    sub_grid[sub_grid == 0] = i+1
+                else:
+                    change_state(3)
 
-            if x - 1 <= scale * (initial[0] + width // 2) <= x + 1:
-                if y - 1 <= scale * (-initial[1] + height // 2) <= y + 1:
-                    interrupt = 1
+            if x - 1 <= robot_xp <= x + 1 and y - 1 <= robot_yp <= y + 1:
+                change_state(1)
+                #interrupt = 1
         
-        if interrupt:
+        if state:
+            rospy.loginfo('DONE!')
             break
 
     return wave_grid
 
+def path2goal(wave_grid):
+    xmax, ymax = wave_grid.shape
+    robot_xp, robot_yp = meters2pixels((pos.x, pos.y))
+    robot_weight = wave_grid[robot_xp, robot_yp]
+    sub_grid = wave_grid[np.maximum(0, robot_xp - 1) : np.minimum(xmax, robot_xp + 2),
+                         np.maximum(0, robot_yp - 1) : np.minimum(ymax, robot_yp + 2)]
+    idxs = np.argwhere(sub_grid == robot_weight - 1)
+    
+    if idxs.size > 0:
+        pixel2follow = tuple(idxs[0] + [np.maximum(0, robot_xp - 1), 
+                                        np.maximum(0, robot_yp - 1)])
+        coord2follow = pixels2meters(pixel2follow)
+    else:
+        change_state(3)
+
+    return coord2follow
 
 def get_laser_params(data):
     """Sets global laser parameters."""
@@ -90,349 +162,6 @@ def get_laser_params(data):
     laser_step = data.angle_increment
     laser_ang_min = data.angle_min
     laser_ang_max = data.angle_max
-
-def angle2goal(x_goal, y_goal):
-    """Computes the angle to reach the goal in respect to world coords.
-    Used to check if an obstacle is obstructing the straight path.
-    """
-    ang = math.atan2(y_goal - pos.y, x_goal - pos.x) - theta
-    ang = (ang + np.pi) % (2 * np.pi) - np.pi # get angle in [-pi, pi)
-    
-    return ang
-
-def range2cart(ranges, idx):
-    """Returns cartesian coord of Scan measurement in respect to world
-    frame.
-    """
-    T0r = np.array([
-                    [np.cos(theta), -np.sin(theta), 0, pos.x],
-                    [np.sin(theta), np.cos(theta), 0, pos.y],
-                    [0, 0, 1, 0],
-                    [0, 0, 0, 1]
-                   ])
-    rangex_robot = ranges[idx] * np.cos(laser_step * idx + laser_ang_min)
-    rangey_robot = ranges[idx] * np.sin(laser_step * idx + laser_ang_min)
-    range_robot = np.array([rangex_robot, rangey_robot, 1, 1]).reshape(-1, 1)
-    range_world = (T0r @ range_robot).ravel()
-    
-    return range_world[:2]
-
-def find_continuities(ranges):
-    """ Returns a list of continuities intervals (min, max) for each
-    detected obstacle, i.e. the closed intervals of <ranges> indices
-    where an obstacle is detected (a continuity).
-
-    Params
-    ------
-    ranges: sensor_msgs.msg.LaserScan.ranges
-        The ranges returned by LaserScan messages.
-    
-    Returns
-    -------
-    cont_lims: list
-        A list of tuples that represent each continuity interval as
-        (min, max), where the values correspond to the <ranges> indices
-        where the condition is satisfied.
-    """
-    # Get indices where laser range < range_max
-    cont_indx = np.nonzero(np.array(ranges) < laser_range_max)[0]
-    # Get superior and inferior limits of continuities
-    lim_sup = np.array([x for i, x in enumerate(cont_indx) 
-                        if (x + 1 != cont_indx[(i + 1) % len(cont_indx)])])
-    lim_inf = np.array([x for i, x in enumerate(cont_indx) 
-                        if (x - 1 != cont_indx[(i - 1) % len(cont_indx)])])
-    cont_lims = [x for x in zip(lim_inf, lim_sup) if x[0] != x[1]]
-    
-    return cont_lims
-    
-def check_blocking_oi(cont_idx, x_goal, y_goal):
-    #TODO check if robot will collide even when goal is visible
-    """Checks if any Oi is blocking the path to goal by angle 
-    comparison.
-    
-    Params
-    ------
-    cont_idx: list
-        A list of tuples that define a continuity region by means of
-        LaserScan indices.
-    x_goal: float
-        The horizontal coordinate of the goal
-    y_goal: float
-        The vertical coordinate of the goal    
-    
-    Returns
-    -------
-    blocking: boolean
-        Indicates whether an Oi is blocking the path to goal
-    reg_num: int or None
-        The region number that is blocking the path to goal, i.e. the
-        index of <cont_idx> that represents the blocking region. If
-        <blocking> == False, this value is None
-    """
-    ang2g = angle2goal(x_goal, y_goal)
-    reg_num = None
-    blocking = False
-
-    for i, region in enumerate(cont_idx):
-        lim_inf = laser_step * region[0] + laser_ang_min
-        lim_sup = laser_step * region[1] + laser_ang_min
-        if lim_inf <= ang2g <= lim_sup:
-            oi_mat = get_oi_coord(list(region))
-            oi_inf_dist = np.linalg.norm(oi_mat[0] - np.array([pos.x, pos.y]))
-            oi_sup_dist = np.linalg.norm(oi_mat[1] - np.array([pos.x, pos.y]))
-            if oi_inf_dist < d_rob2goal or oi_sup_dist < d_rob2goal:
-                blocking = True
-                reg_num = i
-                break
-
-    return blocking, reg_num
-
-def get_oi_coord(cont_idx_list):
-    """Returns a matrix with world cartesian coords of each obstacle.
-
-    Params
-    ------
-    ranges: sensor_msgs.msg.LaserScan.ranges
-        The ranges returned by LaserScan messages.
-    cont_idx_list: list
-        A list of each <ranges> indices that contains a Oi (endpoint).
-    
-    Returns
-    -------
-    oi_mat: np.array
-        A matrix that contains each endpoint Oi coords as a row vector,
-        i.e. [ [Oi_x1, Oi_x1], [Oi_x2, Oi_x2], ..., [Oi_xn, Oi_xn] ].
-
-    """
-    oi_mat = np.empty((len(cont_idx_list), 2))
-    for i, x in enumerate(cont_idx_list):
-        oi_mat[i, :] = range2cart(ranges_, int(x))
-
-    return oi_mat
-
-def approximate_boundary(coords, lims, N_points = 1000):
-    """Approximates a curve by linear regression as
-    a0 + a1xi + a2xi^2 + a3xiyi + a4yi +a5yi^2 = 0, using sampled
-    coordinates.
-
-    Params
-    ------
-    coords: np.array
-        A matrix of object coordinates as matrix rows, i.e.
-        [[x0, y0], [x1, y1],..., [xn, yn]].
-    lims: tuple
-        The interval [inf, sup] for which the approximation is desired.
-    N_points: int
-        Number of points to approximate. Default == 1000.
-
-    Returns
-    -------
-    p: np.array
-        A matrix with each approximated coordinate as matrix rows. 
-        (See <coords>)
-        
-    """
-    M = np.zeros((6,6))
-    coord_std = np.std(coords, axis=0)
-    if np.count_nonzero(coord_std) != 2:
-        idx = np.nonzero(coord_std == 0)
-        coord_std[idx] = 1
-    coord_mean = np.mean(coords, axis=0)
-    coords = (coords - coord_mean) / coord_std
-
-    for coord in coords:
-        xi, yi = coord
-        r = np.array([1, xi, xi**2, xi*yi, yi, yi**2]).reshape(-1, 1)
-        M = M + r @ r.T
-        
-    w, v = np.linalg.eigh(M)
-    a = v[:, 0].reshape(-1, 1)
-
-    A = np.array([
-                    [a[2], a[3] / 2], 
-                    [a[3] / 2, a[5]]
-                ]).reshape(2,2)
-    D, Q = np.linalg.eigh(A)
-    b = np.array([a[1], a[4]]).reshape(-1, 1)
-    c_list = []
-
-    if np.linalg.det(A) >= 1e-3:
-        # c0 + c1*ẍ^2 + c2*ÿ^2=0
-        c0 = float(a[0]- (b.T @ np.linalg.inv(A) @ b)/ 4)
-        c1, c2 = D
-        c_list.append([c0,c1,c2])
-        rx = np.sqrt(-c0 / c1) 
-        ry = np.sqrt(-c0 / c2)
-        theta_ = np.linspace(0, 2*np.pi, N_points)
-        p_ = np.array([rx, ry]).reshape(-1,1) * [np.cos(theta_), np.sin(theta_)]
-        p = Q @ p_ - (np.linalg.inv(A) @ b / 2)
-
-    elif np.linalg.det(A) <= -1e-3:
-        c0 = float(a[0] - (b.T @ np.linalg.inv(A) @ b)/ 4)
-        c1, c2 = D
-        c_list.append([c0,c1,c2])
-        psi = np.linspace(-20, 20, N_points)
-        if c0 / c1 > 0:
-            rx = np.sqrt(c0 / c1)
-            ry = np.sqrt(-c0 / c2)
-            x = rx * np.sinh(psi)
-            y = ry * np.cosh(psi)
-        else:
-            rx = np.sqrt(-c0 / c1)
-            ry = np.sqrt(c0 / c2)
-            x = rx * np.cosh(psi)
-            y = ry * np.sinh(psi)
-        x = np.r_[-x, x]
-        y = np.r_[-y, y]
-        p_ = np.array([x, y])
-        p = Q @ p_ - (np.linalg.inv(A) @ b / 2)
-
-    else:
-        # c0+c1*ẍ + c2*ÿ + c3*ẍ^2 + c4*ÿ^2 =0
-        c0 = float(a[0])
-        aux = (b.T @ Q).ravel()
-        c1, c2 = aux
-        c3, c4 = D
-        c_list.append([c0,c1,c2, c3, c4])
-        t_ = np.linspace(-20, 20, N_points)
-
-        if np.abs(D[0]) < np.abs(D[1]):
-            y = t_
-            x = -c0/c1 - c2/c1 * y -c4/c1 * y**2
-        else: 
-            x = t_
-            y = -c0/c2 - c1/c2 * x -c3/c2 * x**2
-        p_ = np.array([x, y])
-        p = Q @ p_
-
-    p = p * (coord_std).reshape(-1, 1) + coord_mean.reshape(-1, 1)
-
-    return p.T, (w, v, a, A, D, Q, c_list)
-
-def get_tangent_vector(region):
-    lim_inf, lim_sup = region
-    reg_idx = np.unique(np.linspace(lim_inf, lim_sup, -(-(lim_sup - lim_inf) // 2) + 1, dtype=int))
-    oi_mat = get_oi_coord(reg_idx)
-    obstacle, _ = approximate_boundary(oi_mat, (lim_inf, lim_sup))
-    vec_obstacle2robot = obstacle - [pos.x, pos.y]
-    dist_obstacle2robot = np.linalg.norm(vec_obstacle2robot, axis=1)
-    min_dist_idx = np.argmin(dist_obstacle2robot)
-    grad_aprox = vec_obstacle2robot[min_dist_idx]
-    norm_grad = np.linalg.norm(grad_aprox)
-    if norm_grad == 0:
-        norm_grad = 1e-3
-    rot90 = np.array([
-            [np.cos(np.pi/2), -np.sin(np.pi/2)],
-            [np.sin(np.pi/2), np.cos(np.pi/2)]
-        ])
-    rospy.loginfo('obstacle: '+str(obstacle))
-    rospy.loginfo('reg: '+str(region))
-    if lim_sup - lim_inf < 5:
-        rospy.loginfo('ranges: '+str(ranges_))
-    rospy.loginfo(str(pos))
-    #rospy.loginfo('mat: '+str(reg_idx))
-    df = pd.DataFrame(obstacle)
-    df.to_csv('./debug.csv')
-    df2 = pd.DataFrame(oi_mat)
-    df2.to_csv('./debugmat.csv')
-    #rospy.loginfo('grad '+str(grad_aprox))
-    tangent_vec = (rot90 @ (grad_aprox / norm_grad).reshape(-1, 1)).ravel()
-    rospy.loginfo('tangent: '+str(tangent_vec))
-    #rospy.loginfo('min_dst '+str(min_dist_idx)+'  '+str(dist_obstacle2robot[min_dist_idx]))
-    
-    #### DEACTIVATE THIS:VVV
-    #tangent_vec = obstacle[min_dist_idx] + tangent_vec.T
-
-    #rospy.loginfo('go to: '+str(tangent_vec))
-    #safet = safety_distance(tangent_vec)
-    #rospy.loginfo('safety: '+str(safet))
-    #rospy.loginfo('tan1 '+str(tangent_vec))
-    closest_point = obstacle[min_dist_idx]
-    #a = input('DEBUG ')
-
-    return tangent_vec, closest_point
-
-def refine_tangent(ang1, ang2, tangent):
-    """Rotates the tangent 180° if current tangent points in the
-    opposite direction of the goal.
-    """
-    new_tangent = tangent.copy()
-    c1 = np.sign(np.cos(ang1))
-    c2 = np.sign(np.cos(ang2))
-    s1 = np.sign(np.sin(ang1))
-    s2 = np.sign(np.sin(ang2))
-    rospy.loginfo('in refinement')
-    rot180 = np.array([
-                [np.cos(np.pi), -np.sin(np.pi)],
-                [np.sin(np.pi), np.cos(np.pi)]
-             ])
-
-    if c1 != c2 or s1 != s2:
-        new_tangent = (rot180 @ tangent.reshape(-1, 1)).ravel()
-        rospy.loginfo('refined')
-
-    return new_tangent
-
-def choose_oi(ranges, cont_idx, x_goal, y_goal):
-    """Returns the coordinates of best Oi to follow 
-
-    Params
-    ------
-    ranges: sensor_msgs.msg.LaserScan.ranges
-        The ranges returned by LaserScan messages.
-    cont_idx: list
-        A list of tuples that define a continuity region by means of
-        LaserScan indices.
-    x_goal: float
-        The horizontal coordinate of the goal.
-    y_goal: float
-        The vertical coordinate of the goal.
-    
-    Returns
-    -------
-    oi2follow_coord: np.array
-        An array with the followed Oi coordinates.
-    """
-    global d_reach, d_followed
-    pos_vec = np.array([pos.x, pos.y])
-    goal_vec = np.array([x_goal, y_goal])
-    #rospy.loginfo('ccc: '+ str(cont_idx))
-    if isinstance(cont_idx, tuple):
-        cont_idx_list = list(cont_idx)
-    else:
-        cont_idx_list = [x for t in cont_idx for x in t]
-
-    oi_mat = get_oi_coord(cont_idx_list)
-    dist_pos2oi = np.linalg.norm((pos_vec - oi_mat), axis=1)
-    dist_oi2goal = np.linalg.norm((goal_vec - oi_mat), axis=1)
-    heuristic = dist_pos2oi + dist_oi2goal
-    oi2follow = np.argmin(heuristic)
-
-    if state == 1:
-        oi2follow = np.argmin(dist_pos2oi)
-        tangent, closest_point = get_tangent_vector(cont_idx[int(oi2follow // 2)])
-        safe_oi = safety_distance(closest_point, tangent)
-        d_reach = np.linalg.norm(goal_vec - safe_oi)
-        oi2follow_coord = safe_oi
-        #rospy.loginfo('tan'+str(oi2follow_coord.shape)+str(oi2follow_coord))
-    else:
-        tangent, closest_point = get_tangent_vector(cont_idx)
-        #tangent = refine_tangent(ang2goal, ang2point, tangent)
-        rospy.loginfo('new tangent: '+str(tangent))
-        safe_oi = safety_distance(oi_mat[oi2follow, :], tangent)
-        ang2goal = angle2goal(x_goal, y_goal)
-        ang2point = angle2goal(safe_oi[0], safe_oi[1])
-        new_tangent = refine_tangent(ang2goal, ang2point, tangent)
-        #safe_oi = safety_distance(oi_mat[oi2follow, :], new_tangent)
-        #oi2follow_coord = safety_distance(oi_mat[oi2follow, :])
-        d_reach = np.linalg.norm(goal_vec - safe_oi)
-        oi2follow_coord = safe_oi
-
-    if d_reach <= d_followed:
-        d_followed = d_reach
-
-    return oi2follow_coord
-
     
 def traj_controller(x_goal, y_goal, vx=0, vy=0):
     global Kp, pos, Vmax, theta, d
@@ -477,144 +206,8 @@ def callback_pose(data, args):
 
 def change_state(n):
     global state
-    print(f'Stage changed from {state} to {n}')
+    print(f'{states[n]}')
     state = n
-
-def set_goal(data, args):
-    #TODO check if possible to add goal on Stage in runtime
-    odom = data
-    odom.pose.pose.position.x = args[0]
-    odom.pose.pose.position.y = args[1]
-    pub_goal = rospy.Publisher('/robot_1/base_pose_ground_truth', Odometry, queue_size=1)
-    pub_goal.publish(odom)
-
-def safety_distance(oi_coord, tangent_vec):
-    """Adds a safety distance to followed Oi.
-    """
-    #rospy.loginfo('oi___:' + str(oi_coord))
-    #oi_safe = (np.abs(oi_coord) - 0.5) * np.sign(oi_coord)
-    
-    vec_robot2oi = oi_coord - [pos.x, pos.y]
-    #vec_robot2oi = oi_coord
-    oi_dist = np.linalg.norm(vec_robot2oi)
-    if oi_dist == 0:
-        oi_dist = 1e-3
-    #rospy.loginfo('dist__: '+str(oi_dist))
-    oi_norm = vec_robot2oi / oi_dist
-    #oi_safe = (oi_dist - 1.2*wstar) * oi_norm + [pos.x, pos.y]
-    #oi_safe = (oi_dist + wstar) * oi_norm # CHANGED THIS
-    #alpha = (1/((oi_dist - wstar)**2 or 2 * wstar))
-    if oi_dist > 1.3*wstar:
-        alpha = 1.2
-        beta = 1
-    else:
-        #alpha = (1/((oi_dist - wstar) or 2 * wstar))
-        alpha = 1.2
-        beta = 1.2
-    #alpha = 1.2
-    oi_safe = beta * (oi_coord - (wstar * oi_norm)) + alpha * tangent_vec
-    #rospy.loginfo('oi: '+str(oi_coord))
-    #rospy.loginfo('distdist: '+str(oi_dist))
-    #rospy.loginfo('vec: '+str(vec_robot2oi))
-    #rospy.loginfo('vecsafe: '+str(oi_safe))
-    rospy.loginfo('oi__safe_:' + str(oi_safe))
-
-    return oi_safe
-
-def motion2goal(x_goal, y_goal):
-    """Executes motion to goal behaviour using feedback velocity
-    controller with feedback linearization.
-
-    Params
-    ------
-    x_goal: float
-        The horizontal coordinate of the goal.
-    y_goal: float
-        The vertical coordinate of the goal.
-    
-    Returns
-    -------
-    v: float
-        The linear velocity given by feedback linearization
-    w: float
-        The angular velocity given by feedback linearization
-    """
-    #TODO improve blocking check
-    global d_followed
-    cont_idx = find_continuities(ranges_)
-    blocking, reg_num = check_blocking_oi(cont_idx, x_goal, y_goal)
-    
-    if blocking:
-        #rospy.loginfo('Blocked by '+str(cont_idx[reg_num]))
-        d_reach_old = d_reach
-        oi = choose_oi(ranges_, cont_idx[reg_num], x_goal, y_goal)
-        #rospy.loginfo('coords: '+str(oi))
-        #oi_safe = safety_distance(oi)
-        oi_safe = oi
-        #rospy.loginfo('safe: '+str(oi))
-        v, w = traj_controller(oi_safe[0], oi_safe[1])
-
-        if np.linalg.norm(([x_goal, y_goal] - oi_safe)) > d_rob2goal:
-            d_followed = d_reach_old
-            change_state(1)
-            #rospy.loginfo('Changed to State 1 ' + states[state])
-    else:
-        #rospy.loginfo('FREE')
-        v, w = traj_controller(x_goal, y_goal)
-    return v, w
-
-def boundary_following(x_goal, y_goal):
-    global d_followed
-    #Derivative of euclidean norm |x| = x/|x|
-    cont_lims = find_continuities(ranges_)
-    if not cont_lims:
-        change_state(0)
-        return 0, 0
-    #rospy.loginfo('pos: '+str(pos.x)+' '+str(pos.y))
-    closest_oi = choose_oi(ranges_, cont_lims, x_goal, y_goal)
-    #grad_aprox = closest_oi - [pos.x, pos.y]
-    #norm_grad = np.linalg.norm(grad_aprox)
-    #rot90 = np.array([
-    #        [np.cos(np.pi/2), -np.sin(np.pi/2), 0],
-    #        [np.sin(np.pi/2), np.cos(np.pi/2), 0],
-    #        [0, 0, 1]
-    #    ])
-    #tangent_vec = rot90 @ (np.r_[grad_aprox / norm_grad, 0]).reshape(-1, 1)
-    #oi = safety_distance(closest_oi)
-    oi = closest_oi
-    #rospy.loginfo('closest oi: '+str(closest_oi))
-    #rospy.loginfo('TEST: '+str(oi))
-    #x_new = oi[0]
-    #y_new = oi[1]
-    #D = np.linalg.norm(closest_oi - [pos.x, pos.y])
-    #G = D - wstar
-    #DyG = (-closest_oi[0] + pos.x) / D
-    #x_new = pos.x - 1/(DyG) * G
-    #y_new = pos.y + np.abs(np.sqrt(-pos.x**2 + 2 * pos.x * x_new + wstar**2 
-    #                               - x_new**2 + 0j)) * np.sign(closest_oi[1])
-    x_new = oi[0]
-    y_new = oi[1]
-    #rospy.loginfo('posnew: '+str(x_new)+' '+str(y_new))
-    #rospy.loginfo('d_reach: '+str(d_reach)+' d_followd: '+str(d_followed))
-    v, w = traj_controller(x_new, y_new)
-    if d_reach <= d_followed:
-        #d_followed = d_reach
-        change_state(0)
-        #rospy.loginfo('Changed to State 0 ' + states[state])
-
-    #total_lasers = (laser_ang_max - laser_ang_min) // laser_step
-    #right = (-1) ** (last_sensed > total_lasers // 2)
-    #margin = right * total_lasers // 8
-    #cont_list = [x for t in cont_lims for x in t]
-    #for region in cont_lims:
-    #    lim_inf, lim_sup = region
-    #    if right == 1:
-    #        if last_sensed <= lim_inf <= last_sensed + margin:
-    #            oi_coord = get_oi_coord()
-    #    else:
-    #        if last_sensed + margin <= lim_sup <= last_sensed:
-    #            oi_coord = get_oi_coord()
-    return v, w
 
 def run(x_goal, y_goal):
     global pub, counter
@@ -627,17 +220,11 @@ def run(x_goal, y_goal):
     while not rospy.is_shutdown():
         if np.linalg.norm([pos.x - x_goal, pos.y - y_goal]) < err and state != 2:
             change_state(2)
-            rospy.loginfo('Changed to state 2: !! '+ states[state] +' !!')
-        if state == 0:
-            v, w = motion2goal(x_goal, y_goal)
-            twist.linear.x = v
-            twist.angular.z = w
-            pub.publish(twist)
-        elif state == 1:
-            v, w = boundary_following(x_goal, y_goal)
-            twist.linear.x = v
-            twist.angular.z = w
-            pub.publish(twist)
+        
+        v, w = boundary_following(x_goal, y_goal)
+        twist.linear.x = v
+        twist.angular.z = w
+        pub.publish(twist)
 
         counter += 1
         rate.sleep()
