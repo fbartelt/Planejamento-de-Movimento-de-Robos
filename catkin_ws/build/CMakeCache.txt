@@ -419,7 +419,7 @@ learning_tf2_IS_TOP_LEVEL:STATIC=OFF
 learning_tf2_SOURCE_DIR:STATIC=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/src/learning_tf2
 
 //Path to a library.
-lib:FILEPATH=/opt/ros/noetic/lib/libmessage_filters.so
+lib:FILEPATH=/opt/ros/noetic/lib/libtf2.so
 
 //The directory containing a CMake configuration file for math.
 math_DIR:PATH=math_DIR-NOTFOUND
@@ -507,6 +507,15 @@ tf_DIR:PATH=/opt/ros/noetic/share/tf/cmake
 
 //The directory containing a CMake configuration file for turtlesim.
 turtlesim_DIR:PATH=/opt/ros/noetic/share/turtlesim/cmake
+
+//Value Computed by CMake
+wavefront_BINARY_DIR:STATIC=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/wavefront
+
+//Value Computed by CMake
+wavefront_IS_TOP_LEVEL:STATIC=OFF
+
+//Value Computed by CMake
+wavefront_SOURCE_DIR:STATIC=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/src/wavefront
 
 //The directory containing a CMake configuration file for xmlrpcpp.
 xmlrpcpp_DIR:PATH=/opt/ros/noetic/share/xmlrpcpp/cmake
@@ -629,7 +638,7 @@ CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_NM
 CMAKE_NM-ADVANCED:INTERNAL=1
 //number of local generators
-CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=7
+CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=8
 //ADVANCED property for variable: CMAKE_OBJCOPY
 CMAKE_OBJCOPY-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_OBJDUMP

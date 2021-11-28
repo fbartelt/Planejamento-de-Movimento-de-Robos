@@ -1,0 +1,8 @@
+prefix=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/install
+
+Name: wavefront
+Description: Description of wavefront
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

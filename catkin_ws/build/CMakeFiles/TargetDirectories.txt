@@ -129,3 +129,10 @@
 /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/learning_tf2/CMakeFiles/install.dir
 /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/learning_tf2/CMakeFiles/install/local.dir
 /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/learning_tf2/CMakeFiles/install/strip.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/wavefront/CMakeFiles/test.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/wavefront/CMakeFiles/edit_cache.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/wavefront/CMakeFiles/rebuild_cache.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/wavefront/CMakeFiles/list_install_components.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/wavefront/CMakeFiles/install.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/wavefront/CMakeFiles/install/local.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/wavefront/CMakeFiles/install/strip.dir

@@ -68,6 +68,7 @@ all: beginner_tutorials/all
 all: tangent_bug/all
 all: path_following/all
 all: learning_tf2/all
+all: wavefront/all
 .PHONY : all
 
 # The main recursive "preinstall" target.
@@ -76,6 +77,7 @@ preinstall: beginner_tutorials/preinstall
 preinstall: tangent_bug/preinstall
 preinstall: path_following/preinstall
 preinstall: learning_tf2/preinstall
+preinstall: wavefront/preinstall
 .PHONY : preinstall
 
 # The main recursive "clean" target.
@@ -89,6 +91,7 @@ clean: beginner_tutorials/clean
 clean: tangent_bug/clean
 clean: path_following/clean
 clean: learning_tf2/clean
+clean: wavefront/clean
 .PHONY : clean
 
 #=============================================================================
@@ -252,6 +255,21 @@ tangent_bug/clean: tangent_bug/CMakeFiles/actionlib_msgs_generate_messages_lisp.
 tangent_bug/clean: tangent_bug/CMakeFiles/actionlib_msgs_generate_messages_nodejs.dir/clean
 tangent_bug/clean: tangent_bug/CMakeFiles/actionlib_msgs_generate_messages_py.dir/clean
 .PHONY : tangent_bug/clean
+
+#=============================================================================
+# Directory level rules for directory wavefront
+
+# Recursive "all" directory target.
+wavefront/all:
+.PHONY : wavefront/all
+
+# Recursive "preinstall" directory target.
+wavefront/preinstall:
+.PHONY : wavefront/preinstall
+
+# Recursive "clean" directory target.
+wavefront/clean:
+.PHONY : wavefront/clean
 
 #=============================================================================
 # Target rules for target CMakeFiles/download_extra_data.dir
