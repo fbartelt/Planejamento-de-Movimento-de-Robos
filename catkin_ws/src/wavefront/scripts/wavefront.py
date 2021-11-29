@@ -9,18 +9,19 @@ from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import math
 import numpy as np
 import pandas as pd
+import os 
 
 #User defined
 theta = 0.001 #Angle about z axis
 err = 0.3 #Position tolerance in meters
 wstar = 0.8 #Safety distance W*
-Kp = 1 #Controller proportional gain
+Kp = 5 #Controller proportional gain
 d = 0.8 #For feedback linearization
-Vmax = 5 #Max velocity for the robot
+Vmax = 1000 #Max velocity for the robot
 height, width = (16, 16) # in meters
 scale = 28 # meters / pixel
 robot_size = (0.5, 0.5)
-goal = (5, 2)
+#goal = (5, 2) -6 2
 robot_pos0 = (-6, 2)
 
 #Laser params
@@ -31,16 +32,13 @@ laser_ang_min = 0
 laser_ang_max = 0
 
 pos = gmsg.Point()
-pos.x = np.inf # guarantees no instant end of path planning
-pos.y = np.inf
+pos.x = robot_pos0[0] # guarantees no instant end of path planning
+pos.y = robot_pos0[1]
 pub = None
 ranges_ = []
 counter = 0
 state = 0
-d_rob2goal = 0
-d_reach = 0
-d_followed = 0
-states = {0 : 'Calculating Wave-Front Planner', 1 : 'Started Moving', 
+states = {0 : 'Calculating Wave-Front Planner', 1 : 'DONE!\nStarted Moving', 
           2 : 'Reached Goal!!!', 3 : 'Impossible to reach goal'}
 
 def infinite_range(t0):
@@ -102,7 +100,7 @@ def wavefront_planner(grid, goal, neighbors=4):
     #rx = scale * rx
     #ry = scale * ry
     xmax, ymax = grid.shape
-    grid[goal_xp, goal_yp] = 2
+    wave_grid[goal_xp, goal_yp] = 2
     rospy.loginfo(f'{states[state]}\n......')
     
     for i in infinite_range(2):
@@ -112,33 +110,36 @@ def wavefront_planner(grid, goal, neighbors=4):
                 # 4 neighbors
                 sub_gridx = wave_grid[np.maximum(0, x - 1) : np.minimum(xmax, x + 2), y]
                 sub_gridy = wave_grid[x, np.maximum(0, y - 1) : np.minimum(ymax, y + 2)]
-                if (np.array([sub_gridx, sub_gridy]) == 0).any():
-                    sub_gridx[sub_gridx == 0] = i+1
-                    sub_gridy[sub_gridy == 0] = i+1
-                else:
-                    change_state(3)
+                sub_gridx[sub_gridx == 0] = i+1
+                sub_gridy[sub_gridy == 0] = i+1
+                if ((x - 1 <= robot_xp <= x + 1 and robot_yp == y) or 
+                        (y - 1 <= robot_yp <= y + 1 and robot_xp == x)):
+                    change_state(1)
+                    break
             else:
                 # 8 neighbors
                 sub_grid = wave_grid[np.maximum(0, x - 1) : np.minimum(xmax, x + 2),
                                      np.maximum(0, y - 1) : np.minimum(ymax, y + 2)]
-                if (sub_grid == 0).any():
-                    sub_grid[sub_grid == 0] = i+1
-                else:
-                    change_state(3)
-
-            if x - 1 <= robot_xp <= x + 1 and y - 1 <= robot_yp <= y + 1:
-                change_state(1)
+                sub_grid[sub_grid == 0] = i+1
+                if x - 1 <= robot_xp <= x + 1 and y - 1 <= robot_yp <= y + 1:
+                    change_state(1)
+                    break
                 #interrupt = 1
         
         if state:
-            rospy.loginfo('DONE!')
+            #rospy.loginfo('DONE!')
+            break
+
+        if not (grid == 0).any() and not state:
+            change_state(3)
             break
 
     return wave_grid
 
-def path2goal(wave_grid):
+def path2goal(wave_grid, position):
     xmax, ymax = wave_grid.shape
-    robot_xp, robot_yp = meters2pixels((pos.x, pos.y))
+    #robot_xp, robot_yp = meters2pixels((pos.x, pos.y))
+    robot_xp, robot_yp = position
     robot_weight = wave_grid[robot_xp, robot_yp]
     sub_grid = wave_grid[np.maximum(0, robot_xp - 1) : np.minimum(xmax, robot_xp + 2),
                          np.maximum(0, robot_yp - 1) : np.minimum(ymax, robot_yp + 2)]
@@ -149,9 +150,11 @@ def path2goal(wave_grid):
                                         np.maximum(0, robot_yp - 1)])
         coord2follow = pixels2meters(pixel2follow)
     else:
+        pixel2follow = (robot_xp, robot_yp)
+        coord2follow = (pos.x, pos.y)
         change_state(3)
 
-    return coord2follow
+    return (*coord2follow, *pixel2follow)
 
 def get_laser_params(data):
     """Sets global laser parameters."""
@@ -189,8 +192,8 @@ def callback_scan(data):
         get_laser_params(data)
     ranges_ = data.ranges
 
-def callback_pose(data, args):
-    global pos, theta, d_rob2goal
+def callback_pose(data):
+    global pos, theta
     # Gets current position and orientation (Quaternion)
     pos = data.pose.pose.position
     x_ori = data.pose.pose.orientation.x
@@ -200,34 +203,44 @@ def callback_pose(data, args):
 
     ori = euler_from_quaternion([x_ori, y_ori, z_ori, w_ori])
     theta = ori[2]
-    pos_vec = np.array([pos.x, pos.y])
-    goal_vec = np.array([args[0], args[1]])
-    d_rob2goal = np.linalg.norm(pos_vec - goal_vec)
 
 def change_state(n):
     global state
     print(f'{states[n]}')
     state = n
 
-def run(x_goal, y_goal):
+def run(x_goal, y_goal, neighbors=4):
     global pub, counter
     twist = gmsg.Twist()
-    rospy.init_node('tangent_bug', anonymous=True)
+    rospy.init_node('wavefront', anonymous=True)
     pub = rospy.Publisher('robot_0/cmd_vel', gmsg.Twist, queue_size=1)
     scan_sub = rospy.Subscriber('robot_0/base_scan', LaserScan, callback_scan)
-    pos_sub = rospy.Subscriber('robot_0/base_pose_ground_truth', Odometry, callback_pose, (x_goal, y_goal))
-    rate = rospy.Rate(20)
-    while not rospy.is_shutdown():
-        if np.linalg.norm([pos.x - x_goal, pos.y - y_goal]) < err and state != 2:
-            change_state(2)
-        
-        v, w = boundary_following(x_goal, y_goal)
-        twist.linear.x = v
-        twist.angular.z = w
-        pub.publish(twist)
+    pos_sub = rospy.Subscriber('robot_0/base_pose_ground_truth', Odometry, callback_pose)
+    rate = rospy.Rate(1000)
+    curr_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    grid_path = os.path.join(curr_path, 'worlds/grid1.npy')
+    grid = np.load(grid_path)
+    wave_grid = wavefront_planner(grid, (x_goal, y_goal), neighbors)
+    aux = meters2pixels((pos.x, pos.y))
+    x_next, y_next, x_px, y_px = path2goal(wave_grid, aux)
 
-        counter += 1
-        rate.sleep()
+    while not rospy.is_shutdown():
+        if state != 2:
+            if np.linalg.norm([pos.x - x_goal, pos.y - y_goal]) < err:
+                change_state(2)
+            elif np.linalg.norm([pos.x - x_next, pos.y - y_next]) < err/4:
+                #input(f'{x_next} {y_next}')
+                x_next, y_next, x_px, y_px = path2goal(wave_grid, (x_px, y_px))
+            elif state == 3:
+                break
+
+            v, w = traj_controller(x_next, y_next)
+            twist.linear.x = v
+            twist.angular.z = w
+            pub.publish(twist)
+            counter += 1
+            rate.sleep()
+            
 
 
 if __name__ == '__main__':

@@ -1,0 +1,9 @@
+<launch>
+
+    <node name="Stage" pkg="stage_ros" type="stageros" args="$(find wavefront)/worlds/maze.world">
+    </node>
+
+    <arg name="goal"/>
+    <node pkg="wavefront" type="wavefront.py" name="wavefront" args="$(arg goal)"/>
+
+</launch>
