@@ -67,6 +67,7 @@ all: gtest/all
 all: beginner_tutorials/all
 all: tangent_bug/all
 all: path_following/all
+all: potential_function/all
 all: learning_tf2/all
 all: wavefront/all
 .PHONY : all
@@ -76,6 +77,7 @@ preinstall: gtest/preinstall
 preinstall: beginner_tutorials/preinstall
 preinstall: tangent_bug/preinstall
 preinstall: path_following/preinstall
+preinstall: potential_function/preinstall
 preinstall: learning_tf2/preinstall
 preinstall: wavefront/preinstall
 .PHONY : preinstall
@@ -90,6 +92,7 @@ clean: gtest/clean
 clean: beginner_tutorials/clean
 clean: tangent_bug/clean
 clean: path_following/clean
+clean: potential_function/clean
 clean: learning_tf2/clean
 clean: wavefront/clean
 .PHONY : clean
@@ -221,6 +224,21 @@ path_following/clean: path_following/CMakeFiles/tf2_msgs_generate_messages_lisp.
 path_following/clean: path_following/CMakeFiles/tf2_msgs_generate_messages_nodejs.dir/clean
 path_following/clean: path_following/CMakeFiles/tf2_msgs_generate_messages_py.dir/clean
 .PHONY : path_following/clean
+
+#=============================================================================
+# Directory level rules for directory potential_function
+
+# Recursive "all" directory target.
+potential_function/all:
+.PHONY : potential_function/all
+
+# Recursive "preinstall" directory target.
+potential_function/preinstall:
+.PHONY : potential_function/preinstall
+
+# Recursive "clean" directory target.
+potential_function/clean:
+.PHONY : potential_function/clean
 
 #=============================================================================
 # Directory level rules for directory tangent_bug

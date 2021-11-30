@@ -3,6 +3,6 @@ CATKIN_PACKAGE_PREFIX = ""
 PROJECT_PKG_CONFIG_INCLUDE_DIRS = "".split(';') if "" != "" else []
 PROJECT_CATKIN_DEPENDS = "".replace(';', ' ')
 PKG_CONFIG_LIBRARIES_WITH_PREFIX = "".split(';') if "" != "" else []
-PROJECT_NAME = "wavefront"
-PROJECT_SPACE_DIR = "/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/install"
-PROJECT_VERSION = "2.0.0"
+PROJECT_NAME = "potential_function"
+PROJECT_SPACE_DIR = "/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/devel"
+PROJECT_VERSION = "0.0.0"

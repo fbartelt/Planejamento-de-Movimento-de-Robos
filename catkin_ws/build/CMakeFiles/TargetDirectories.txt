@@ -112,6 +112,13 @@
 /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/path_following/CMakeFiles/install.dir
 /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/path_following/CMakeFiles/install/local.dir
 /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/path_following/CMakeFiles/install/strip.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/potential_function/CMakeFiles/test.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/potential_function/CMakeFiles/edit_cache.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/potential_function/CMakeFiles/rebuild_cache.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/potential_function/CMakeFiles/list_install_components.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/potential_function/CMakeFiles/install.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/potential_function/CMakeFiles/install/local.dir
+/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/potential_function/CMakeFiles/install/strip.dir
 /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/learning_tf2/CMakeFiles/turtlesim_generate_messages_cpp.dir
 /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/learning_tf2/CMakeFiles/turtlesim_generate_messages_eus.dir
 /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/learning_tf2/CMakeFiles/turtlesim_generate_messages_lisp.dir
