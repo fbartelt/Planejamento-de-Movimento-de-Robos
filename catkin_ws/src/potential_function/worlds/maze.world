@@ -33,7 +33,7 @@ floorplan
 robot1
 (
       name "robot1"
-      pose [-6 2 0.000 0]
+      pose [-2 -4 0.000 0]
       color "green"
 )
 

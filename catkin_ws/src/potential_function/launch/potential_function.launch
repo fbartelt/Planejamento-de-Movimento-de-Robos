@@ -1,0 +1,9 @@
+<launch>
+
+    <arg name="goal" default="5 2"/>
+    <node name="Stage" pkg="stage_ros" type="stageros" args="$(find potential_function)/worlds/maze.world">
+    </node>
+
+    <node pkg="potential_function" type="potential_function.py" name="potential_function" args="$(arg goal)" output="screen"/>
+
+</launch>
