@@ -12,12 +12,12 @@ import numpy as np
 theta = 0.001 #Angle about z axis
 err = 0.3 #Position tolerance in meters
 Kp = 1 #Controller proportional gain
-d = 0.8 #For feedback linearization
+d = 0.1 #For feedback linearization
 Vmax = 20 #Max velocity for the robot
 zeta = 5
 d_star = 3
-eta = 300
-Q_star = 1.2
+eta = 10
+Q_star = 3
 alpha = 0.2
 
 #Laser params
@@ -116,10 +116,10 @@ def attractive_potential(q, q_goal):
     """
     d_qqgoal = np.linalg.norm(q - q_goal)
     if d_qqgoal <= d_star:
-        U_att = 0.5 * zeta * d_qqgoal ** 2
+        U_att = 0.5 * zeta * (d_qqgoal ** 2)
         grad_Uatt = zeta * (q - q_goal)
     else:
-        U_att = d_star * zeta * d_qqgoal - 0.5 * zeta * d_star ** 2
+        U_att = d_star * zeta * d_qqgoal - 0.5 * zeta * (d_star ** 2)
         grad_Uatt = d_star * zeta * (q - q_goal) / d_qqgoal
     
     return U_att, grad_Uatt
@@ -143,7 +143,7 @@ def repulsive_potential(q):
         The total repulsive potential gradient
     """
     U_rep = 0
-    grad_Urep = 0
+    grad_Urep = np.array([0.0, 0.0])
     regions = find_continuities()
 
     for obstacle in regions:
@@ -152,13 +152,16 @@ def repulsive_potential(q):
         qoi_mat = get_oi_config(range_idx_list)
         d_c = np.linalg.norm((q - qoi_mat), axis=1)
         idx_minc = np.argmin(d_c)
-        d_qqobs = d_c[idx_minc]
+        d_qqobs = d_c[idx_minc] - 0.4
         c = qoi_mat[idx_minc, :]
         grad_d = (q - c) / d_qqobs
+        rospy.loginfo('sizes: ' + str(qoi_mat.shape) + ' ' + str(q.shape))
         
         if d_qqobs <= Q_star:
             U_rep += 0.5 * eta * (1 / d_qqobs - 1 / Q_star)**2
-            grad_Urep += eta * (1 / Q_star - 1 / d_qqobs) * 1 / (d_qqobs ** 2) * grad_d
+            grad_Urep += eta * (1 / Q_star - 1 / d_qqobs) * (1 / (d_qqobs ** 2)) * grad_d
+            rospy.loginfo('d_qqobs: ' + str(d_qqobs))
+            rospy.loginfo('norm ' + str(np.linalg.norm(grad_d)))
         else:
             U_rep += 0
             grad_Urep += 0 
@@ -181,11 +184,11 @@ def get_oi_config(ranges_idx_list):
         [ [Oi1_x, Oi1_y, Oi1_theta], ..., [Oin_x, Oin_y, Oin_theta] ].
 
     """
-    qoi_mat = np.empty((len(ranges_idx_list), 3))
+    qoi_mat = np.empty((len(ranges_idx_list), 2))
     for i, x in enumerate(ranges_idx_list):
         oi_coord = range2cart(ranges_, int(x))
-        oi_theta = angle2goal(oi_coord[0], oi_coord[1])
-        qoi_mat[i, :] = np.r_[oi_coord, oi_theta]
+        #oi_theta = angle2goal(oi_coord[0], oi_coord[1])
+        qoi_mat[i, :] = oi_coord
 
     return qoi_mat
     
@@ -193,6 +196,25 @@ def traj_controller(x_goal, y_goal, vx=0, vy=0):
     global Kp, pos, Vmax, theta, d
     u1 = vx + Kp * (x_goal - pos.x)
     u2 = vy + Kp * (y_goal - pos.y)
+    Vtot = math.sqrt(u1**2 + u2**2)
+    if (Vtot > Vmax):
+        u1 = u1 * Vmax / Vtot
+        u2 = u2 * Vmax / Vtot
+    # feddback linearization
+    A = [
+        [np.cos(theta), -d * np.sin(theta)],
+        [np.sin(theta), d * np.cos(theta)]
+        ]
+    vw = np.linalg.inv(A) @ [[u1], [u2]]
+    v = float(vw[0])
+    w = float(vw[1])
+    
+    return v, w
+
+def traj_controller2(vx, vy):
+    global Kp, pos, Vmax, theta, d
+    u1 = vx
+    u2 = vy
     Vtot = math.sqrt(u1**2 + u2**2)
     if (Vtot > Vmax):
         u1 = u1 * Vmax / Vtot
@@ -243,22 +265,28 @@ def run(x_goal, y_goal):
     U_grad = np.array([100, 100])
 
     while not rospy.is_shutdown():
-        q = np.array([pos.x, pos.y, theta])
+        #a = input(f'{counter}')
+        q = np.array([pos.x, pos.y])
         #rospy.loginfo('U: '+str(U_grad))
-        q_goal = np.array([x_goal, y_goal, 0])
-        if np.linalg.norm(U_grad[1:2]) < err and state != 2:
+        q_goal = np.array([x_goal, y_goal])
+        if np.linalg.norm(U_grad[0:2]) < err and state != 2:
+            #rospy.loginfo('test2: ' + str(counter))
             change_state(2)
         if state == 0:
             U_att, grad_Uatt = attractive_potential(q, q_goal)
             U_rep, grad_Urep = repulsive_potential(q)
-            U = U_att + U_rep
-            U_grad = grad_Uatt + grad_Urep
+            U = U_att
+            #grad_Uatt = np.array([0.4, 0.0, 0.0])
+            U_grad = -grad_Uatt - grad_Urep
+            rospy.loginfo('testA: ' + str(grad_Uatt))    
+            rospy.loginfo('testG: ' + str(grad_Urep))    
             q = q - alpha * U_grad
-            v, w = traj_controller(q[0], q[1])
+            v, w = traj_controller2(U_grad[0], U_grad[1])
             twist.linear.x = v
             twist.angular.z = w
             pub.publish(twist)
-
+        #a= input('aaa')
+        #rospy.loginfo('test: ' + str(U_grad))
         counter += 1
         rate.sleep()
 
