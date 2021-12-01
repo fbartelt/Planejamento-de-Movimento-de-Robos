@@ -16,7 +16,7 @@ save_path = os.path.join(parent_folder, 'worlds/grid1.npy') #Edit the path as ne
 # Stage Parameters, change these as needed
 width, height = (16, 16) # floorpan size in Stage .world file (in meters)
 scale = 28 # window scale paramter in Stage .world file (in meters / pixel)
-robot_size = (0.5, 0.5) # robot size defined in .world file (or any .inc)
+robot_size = (1.2*np.sqrt(2), 1.2*np.sqrt(2)) # robot size defined in .world file (or any .inc)
 initial = (-6, 2) # robot initial position defined in .world file
 
 img_big = cv2.resize(map_image, (width * scale, height * scale), interpolation = cv2.INTER_AREA)
