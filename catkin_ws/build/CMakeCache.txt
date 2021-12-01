@@ -56,7 +56,7 @@ CMAKE_BUILD_TYPE:STRING=
 CMAKE_COLOR_MAKEFILE:BOOL=ON
 
 //CXX compiler
-CMAKE_CXX_COMPILER:STRING=/sbin/c++
+CMAKE_CXX_COMPILER:FILEPATH=/sbin/c++
 
 //A wrapper around 'ar' adding the appropriate '--plugin' option
 // for the GCC compiler
@@ -82,7 +82,7 @@ CMAKE_CXX_FLAGS_RELEASE:STRING=-O3 -DNDEBUG
 CMAKE_CXX_FLAGS_RELWITHDEBINFO:STRING=-O2 -g -DNDEBUG
 
 //C compiler
-CMAKE_C_COMPILER:STRING=/sbin/cc
+CMAKE_C_COMPILER:FILEPATH=/sbin/cc
 
 //A wrapper around 'ar' adding the appropriate '--plugin' option
 // for the GCC compiler
@@ -327,15 +327,6 @@ actionlib_DIR:PATH=/opt/ros/noetic/share/actionlib/cmake
 //The directory containing a CMake configuration file for actionlib_msgs.
 actionlib_msgs_DIR:PATH=/opt/ros/noetic/share/actionlib_msgs/cmake
 
-//Value Computed by CMake
-beginner_tutorials_BINARY_DIR:STATIC=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/beginner_tutorials
-
-//Value Computed by CMake
-beginner_tutorials_IS_TOP_LEVEL:STATIC=OFF
-
-//Value Computed by CMake
-beginner_tutorials_SOURCE_DIR:STATIC=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/src/beginner_tutorials
-
 //The directory containing a CMake configuration file for catkin.
 catkin_DIR:PATH=/opt/ros/noetic/share/catkin/cmake
 
@@ -409,20 +400,8 @@ gtest_hide_internal_symbols:BOOL=OFF
 //Dependencies for the target
 gtest_main_LIB_DEPENDS:STATIC=general;gtest;
 
-//Value Computed by CMake
-learning_tf2_BINARY_DIR:STATIC=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/learning_tf2
-
-//Value Computed by CMake
-learning_tf2_IS_TOP_LEVEL:STATIC=OFF
-
-//Value Computed by CMake
-learning_tf2_SOURCE_DIR:STATIC=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/src/learning_tf2
-
 //Path to a library.
 lib:FILEPATH=/opt/ros/noetic/lib/libtf2.so
-
-//The directory containing a CMake configuration file for math.
-math_DIR:PATH=math_DIR-NOTFOUND
 
 //The directory containing a CMake configuration file for message_filters.
 message_filters_DIR:PATH=/opt/ros/noetic/share/message_filters/cmake
@@ -435,9 +414,6 @@ message_runtime_DIR:PATH=/opt/ros/noetic/share/message_runtime/cmake
 
 //The directory containing a CMake configuration file for nav_msgs.
 nav_msgs_DIR:PATH=/opt/ros/noetic/share/nav_msgs/cmake
-
-//The directory containing a CMake configuration file for numpy.
-numpy_DIR:PATH=numpy_DIR-NOTFOUND
 
 //Value Computed by CMake
 path_following_BINARY_DIR:STATIC=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/path_following
@@ -487,9 +463,6 @@ sensor_msgs_DIR:PATH=/opt/ros/noetic/share/sensor_msgs/cmake
 //The directory containing a CMake configuration file for std_msgs.
 std_msgs_DIR:PATH=/opt/ros/noetic/share/std_msgs/cmake
 
-//The directory containing a CMake configuration file for std_srvs.
-std_srvs_DIR:PATH=/opt/ros/noetic/share/std_srvs/cmake
-
 //Value Computed by CMake
 tangent_bug_BINARY_DIR:STATIC=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/tangent_bug
 
@@ -513,9 +486,6 @@ tf2_ros_DIR:PATH=/opt/ros/noetic/share/tf2_ros/cmake
 
 //The directory containing a CMake configuration file for tf.
 tf_DIR:PATH=/opt/ros/noetic/share/tf/cmake
-
-//The directory containing a CMake configuration file for turtlesim.
-turtlesim_DIR:PATH=/opt/ros/noetic/share/turtlesim/cmake
 
 //Value Computed by CMake
 wavefront_BINARY_DIR:STATIC=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/wavefront
@@ -647,7 +617,7 @@ CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_NM
 CMAKE_NM-ADVANCED:INTERNAL=1
 //number of local generators
-CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=9
+CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=7
 //ADVANCED property for variable: CMAKE_OBJCOPY
 CMAKE_OBJCOPY-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_OBJDUMP
@@ -717,7 +687,7 @@ PYTHON_INSTALL_DIR:INTERNAL=lib/python3.9/site-packages
 //Path to a program.
 _Python_EXECUTABLE:INTERNAL=/sbin/python3.9
 //Python Properties
-_Python_INTERPRETER_PROPERTIES:INTERNAL=Python;3;9;7;64;;cpython-39-x86_64-linux-gnu;/usr/lib/python3.9;/usr/lib/python3.9;/usr/lib/python3.9/site-packages;/usr/lib/python3.9/site-packages
+_Python_INTERPRETER_PROPERTIES:INTERNAL=Python;3;9;9;64;;cpython-39-x86_64-linux-gnu;/usr/lib/python3.9;/usr/lib/python3.9;/usr/lib/python3.9/site-packages;/usr/lib/python3.9/site-packages
 _Python_INTERPRETER_SIGNATURE:INTERNAL=3bc36eee74994cb8d4968149e531a71b
 cmake_package_name:INTERNAL=GTest
 //ADVANCED property for variable: gmock_build_tests
