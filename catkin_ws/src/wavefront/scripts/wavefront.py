@@ -12,14 +12,13 @@ import os
 #User defined
 theta = 0.001 #Angle about z axis
 err = 0.3 #Position tolerance in meters
-wstar = 0.8 #Safety distance W*
+wstar = 0.1 #Safety distance W*
 Kp = 5 #Controller proportional gain
-d = 0.8 #For feedback linearization
+d = 0.1 #For feedback linearization
 Vmax = 1000 #Max velocity for the robot
 height, width = (16, 16) # in meters
 scale = 28 # meters / pixel
 robot_size = (0.5, 0.5)
-#goal = (5, 2) -6 2
 robot_pos0 = (-6, 2)
 
 #Laser params
@@ -30,7 +29,7 @@ laser_ang_min = 0
 laser_ang_max = 0
 
 pos = gmsg.Point()
-pos.x = robot_pos0[0] # guarantees no instant end of path planning
+pos.x = robot_pos0[0]
 pos.y = robot_pos0[1]
 pub = None
 ranges_ = []
@@ -245,12 +244,12 @@ def run(x_goal, y_goal, neighbors=4):
         if state != 2:
             if np.linalg.norm([pos.x - x_goal, pos.y - y_goal]) < err:
                 change_state(2)
-            elif np.linalg.norm([pos.x - x_next, pos.y - y_next]) < err/4:
+            elif np.linalg.norm([pos.x - x_next, pos.y - y_next]) < err:
                 x_next, y_next, x_px, y_px = path2goal(wave_grid, (x_px, y_px))
             elif state == 3:
                 break
 
-            v, w = traj_controller(x_next, y_next)
+            v, w = traj_controller(x_next, y_next, 1, 1)
             twist.linear.x = v
             twist.angular.z = w
             pub.publish(twist)
