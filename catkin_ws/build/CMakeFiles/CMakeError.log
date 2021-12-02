@@ -1,22 +1,22 @@
 Performing C SOURCE FILE Test CMAKE_HAVE_LIBC_PTHREAD failed with the following output:
 Change Dir: /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/CMakeFiles/CMakeTmp
 
-Run Build Command(s):/sbin/make -f Makefile cmTC_ccbff/fast && /sbin/make  -f CMakeFiles/cmTC_ccbff.dir/build.make CMakeFiles/cmTC_ccbff.dir/build
+Run Build Command(s):/sbin/make -f Makefile cmTC_fd5f3/fast && /sbin/make  -f CMakeFiles/cmTC_fd5f3.dir/build.make CMakeFiles/cmTC_fd5f3.dir/build
 make[1]: Entering directory '/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/CMakeFiles/CMakeTmp'
-Building C object CMakeFiles/cmTC_ccbff.dir/src.c.o
-/sbin/cc -DCMAKE_HAVE_LIBC_PTHREAD   -o CMakeFiles/cmTC_ccbff.dir/src.c.o -c /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/CMakeFiles/CMakeTmp/src.c
-Linking C executable cmTC_ccbff
-/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_ccbff.dir/link.txt --verbose=1
-/sbin/cc -rdynamic CMakeFiles/cmTC_ccbff.dir/src.c.o -o cmTC_ccbff 
-/sbin/ld: CMakeFiles/cmTC_ccbff.dir/src.c.o: in function `main':
+Building C object CMakeFiles/cmTC_fd5f3.dir/src.c.o
+/sbin/cc -DCMAKE_HAVE_LIBC_PTHREAD   -o CMakeFiles/cmTC_fd5f3.dir/src.c.o -c /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/CMakeFiles/CMakeTmp/src.c
+Linking C executable cmTC_fd5f3
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_fd5f3.dir/link.txt --verbose=1
+/sbin/cc -rdynamic CMakeFiles/cmTC_fd5f3.dir/src.c.o -o cmTC_fd5f3 
+/sbin/ld: CMakeFiles/cmTC_fd5f3.dir/src.c.o: in function `main':
 src.c:(.text+0x3e): undefined reference to `pthread_create'
 /sbin/ld: src.c:(.text+0x4a): undefined reference to `pthread_detach'
 /sbin/ld: src.c:(.text+0x56): undefined reference to `pthread_cancel'
 /sbin/ld: src.c:(.text+0x67): undefined reference to `pthread_join'
 collect2: error: ld returned 1 exit status
-make[1]: *** [CMakeFiles/cmTC_ccbff.dir/build.make:99: cmTC_ccbff] Error 1
+make[1]: *** [CMakeFiles/cmTC_fd5f3.dir/build.make:99: cmTC_fd5f3] Error 1
 make[1]: Leaving directory '/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/CMakeFiles/CMakeTmp'
-make: *** [Makefile:127: cmTC_ccbff/fast] Error 2
+make: *** [Makefile:127: cmTC_fd5f3/fast] Error 2
 
 
 Source file was:
@@ -43,18 +43,18 @@ int main(void)
 Determining if the function pthread_create exists in the pthreads failed with the following output:
 Change Dir: /home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/CMakeFiles/CMakeTmp
 
-Run Build Command(s):/sbin/make -f Makefile cmTC_d7a22/fast && /sbin/make  -f CMakeFiles/cmTC_d7a22.dir/build.make CMakeFiles/cmTC_d7a22.dir/build
+Run Build Command(s):/sbin/make -f Makefile cmTC_8845f/fast && /sbin/make  -f CMakeFiles/cmTC_8845f.dir/build.make CMakeFiles/cmTC_8845f.dir/build
 make[1]: Entering directory '/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/CMakeFiles/CMakeTmp'
-Building C object CMakeFiles/cmTC_d7a22.dir/CheckFunctionExists.c.o
-/sbin/cc   -DCHECK_FUNCTION_EXISTS=pthread_create -o CMakeFiles/cmTC_d7a22.dir/CheckFunctionExists.c.o -c /usr/share/cmake-3.21/Modules/CheckFunctionExists.c
-Linking C executable cmTC_d7a22
-/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_d7a22.dir/link.txt --verbose=1
-/sbin/cc  -DCHECK_FUNCTION_EXISTS=pthread_create -rdynamic CMakeFiles/cmTC_d7a22.dir/CheckFunctionExists.c.o -o cmTC_d7a22  -lpthreads 
+Building C object CMakeFiles/cmTC_8845f.dir/CheckFunctionExists.c.o
+/sbin/cc   -DCHECK_FUNCTION_EXISTS=pthread_create -o CMakeFiles/cmTC_8845f.dir/CheckFunctionExists.c.o -c /usr/share/cmake-3.22/Modules/CheckFunctionExists.c
+Linking C executable cmTC_8845f
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_8845f.dir/link.txt --verbose=1
+/sbin/cc  -DCHECK_FUNCTION_EXISTS=pthread_create -rdynamic CMakeFiles/cmTC_8845f.dir/CheckFunctionExists.c.o -o cmTC_8845f  -lpthreads 
 /sbin/ld: cannot find -lpthreads
 collect2: error: ld returned 1 exit status
-make[1]: *** [CMakeFiles/cmTC_d7a22.dir/build.make:99: cmTC_d7a22] Error 1
+make[1]: *** [CMakeFiles/cmTC_8845f.dir/build.make:99: cmTC_8845f] Error 1
 make[1]: Leaving directory '/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/CMakeFiles/CMakeTmp'
-make: *** [Makefile:127: cmTC_d7a22/fast] Error 2
+make: *** [Makefile:127: cmTC_8845f/fast] Error 2
 
 
 

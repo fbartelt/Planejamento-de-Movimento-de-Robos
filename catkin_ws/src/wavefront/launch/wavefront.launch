@@ -1,0 +1,10 @@
+<launch>
+
+    <arg name="goal" default="5 2"/>
+    <arg name="neighbors" default="4"/>
+    <node name="Stage" pkg="stage_ros" type="stageros" args="$(find wavefront)/worlds/maze.world">
+    </node>
+
+    <node pkg="wavefront" type="wavefront.py" name="wavefront" args="$(arg goal) $(arg neighbors)" output="screen"/>
+
+</launch>

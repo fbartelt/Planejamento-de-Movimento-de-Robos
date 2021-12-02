@@ -136,9 +136,10 @@ endif()
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
   include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/gtest/cmake_install.cmake")
-  include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/beginner_tutorials/cmake_install.cmake")
   include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/tangent_bug/cmake_install.cmake")
-  include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/learning_tf2/cmake_install.cmake")
+  include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/path_following/cmake_install.cmake")
+  include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/potential_function/cmake_install.cmake")
+  include("/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/build/wavefront/cmake_install.cmake")
 
 endif()
 

@@ -1,0 +1,8 @@
+prefix=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/install
+
+Name: potential_function
+Description: Description of potential_function
+Version: 2.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

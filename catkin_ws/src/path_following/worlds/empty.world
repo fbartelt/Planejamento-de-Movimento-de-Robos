@@ -1,0 +1,39 @@
+include "map1.inc"
+include "robot1.inc"
+
+# spatial resolution of the underlying occupancy grid. Default is 0.02m.
+resolution 0.02
+# interval_sim 50 # simulation timestep in ms
+
+# configure the GUI window
+window
+(
+  size [ 450 450 ] # in pixels
+  scale 28.125   # pixels per meter
+  center [ -0.040  -0.274 ]
+  rotate [ 0  0 ]
+  show_footprints 1
+  show_grid 1
+  show_status 1
+  			
+  show_data 1              # 1=on 0=off
+)
+
+# load an environment bitmap
+floorplan
+( 
+  name "empty"
+  size [16 16 0.001]
+  pose [0 0 0 0]
+  #color_rgba [8, 14, 44 1]
+  color "PeachPuff"
+  bitmap "param_curve.png"
+)
+
+robot1
+(
+      name "robot1"
+      pose [-5 -5 0.000 0]
+      color "green"
+)
+

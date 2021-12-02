@@ -1,0 +1,8 @@
+prefix=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/install
+
+Name: path_following
+Description: Description of path_following
+Version: 1.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 
