@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from typing import Counter
 import rospy
 import tf2_ros as tf2
 #import tf_conversions
@@ -17,7 +16,7 @@ theta = 0.001 #Angle about z axis
 err = 0.3 #Position tolerance in meters
 wstar = 0.8 #Safety distance W*
 Kp = 1 #Controller proportional gain
-d = 0.8 #For feedback linearization
+d = 0.1 #For feedback linearization
 Vmax = 5 #Max velocity for the robot
 
 #Laser params
@@ -81,7 +80,6 @@ def find_continuities(ranges):
     """ Returns a list of continuities intervals (min, max) for each
     detected obstacle, i.e. the closed intervals of <ranges> indices
     where an obstacle is detected (a continuity).
-
     Params
     ------
     ranges: sensor_msgs.msg.LaserScan.ranges
@@ -149,7 +147,6 @@ def check_blocking_oi(cont_idx, x_goal, y_goal):
 
 def get_oi_coord(cont_idx_list):
     """Returns a matrix with world cartesian coords of each obstacle.
-
     Params
     ------
     ranges: sensor_msgs.msg.LaserScan.ranges
@@ -162,7 +159,6 @@ def get_oi_coord(cont_idx_list):
     oi_mat: np.array
         A matrix that contains each endpoint Oi coords as a row vector,
         i.e. [ [Oi_x1, Oi_x1], [Oi_x2, Oi_x2], ..., [Oi_xn, Oi_xn] ].
-
     """
     oi_mat = np.empty((len(cont_idx_list), 2))
     for i, x in enumerate(cont_idx_list):
@@ -174,7 +170,6 @@ def approximate_boundary(coords, lims, N_points = 1000):
     """Approximates a curve by linear regression as
     a0 + a1xi + a2xi^2 + a3xiyi + a4yi +a5yi^2 = 0, using sampled
     coordinates.
-
     Params
     ------
     coords: np.array
@@ -184,7 +179,6 @@ def approximate_boundary(coords, lims, N_points = 1000):
         The interval [inf, sup] for which the approximation is desired.
     N_points: int
         Number of points to approximate. Default == 1000.
-
     Returns
     -------
     p: np.array
@@ -319,6 +313,47 @@ def line_approx_boundary(coords, lims, N_points = 1000):
     p = np.c_[xt, y]
     return p, (coefs, xs, y)
 
+def get_tangent_vector2(region):
+    #a = input('DEBUG')
+    reg_idx = []
+    rospy.loginfo('region: '+str(region))
+    if isinstance(region, tuple):
+        region = [region]
+    for lims in region:
+        lim_inf, lim_sup = lims
+        idxs = np.unique(np.linspace(lim_inf, lim_sup, -(-3*(lim_sup - lim_inf) // 4) + 1, dtype=int))
+        reg_idx = np.r_[np.array(reg_idx), idxs]
+    oi_mat = get_oi_coord(reg_idx)
+    pos_vec = np.array([pos.x, pos.y])
+    norm_mat = np.linalg.norm(pos_vec - oi_mat, axis=1) ** 2
+    min_idx = np.argmin(norm_mat)
+    min_dist = norm_mat[min_idx]
+    h = 0.1
+    sum_, div_ = np.array([0.0, 0.0]), 0
+    
+    for i, a in enumerate(norm_mat):
+        temp = np.exp((min_dist - a) / (2 * h ** 2))
+        sum_ += temp * (pos_vec - oi_mat[i, :])
+        div_ += temp
+    
+    rot90 = np.array([
+            [np.cos(-np.pi/2), -np.sin(-np.pi/2)],
+            [np.sin(-np.pi/2), np.cos(-np.pi/2)]
+        ])
+    
+    D = sum_ / div_
+    tangent = (rot90 @ D.reshape(-1, 1)).ravel()
+    rospy.loginfo('tangent: ' + str(tangent))
+    closest_point = pos_vec - D
+    #closest_point = oi_mat[min_idx, :]
+    df = pd.DataFrame(closest_point)
+    df.to_csv('./closest.csv')
+    df = pd.DataFrame(pos_vec)
+    df.to_csv('./robot_pos.csv')
+    df2 = pd.DataFrame(oi_mat)
+    df2.to_csv('./debugmat.csv')
+    
+    return tangent, closest_point
 
 def get_tangent_vector(region):
     lim_inf, lim_sup = region
@@ -412,7 +447,6 @@ def refine_tangent(tangent):
 
 def choose_oi(ranges, cont_idx, x_goal, y_goal):
     """Returns the coordinates of best Oi to follow 
-
     Params
     ------
     ranges: sensor_msgs.msg.LaserScan.ranges
@@ -444,10 +478,10 @@ def choose_oi(ranges, cont_idx, x_goal, y_goal):
     dist_oi2goal = np.linalg.norm((goal_vec - oi_mat), axis=1)
     heuristic = dist_pos2oi + dist_oi2goal
     oi2follow = np.argmin(heuristic)
-    a = input('DEBUG')
+    #a = input('DEBUG')
     if state == 1:
         oi2follow = np.argmin(dist_pos2oi)
-        tangent, closest_point = get_tangent_vector(cont_idx[int(oi2follow // 2)])
+        tangent, closest_point = get_tangent_vector2(cont_idx)
         #tangent = refine_tangent(tangent)
         safe_oi = safety_distance(closest_point, tangent)
         rospy.loginfo('point: '+str(safe_oi))
@@ -455,9 +489,10 @@ def choose_oi(ranges, cont_idx, x_goal, y_goal):
         oi2follow_coord = safe_oi
         #rospy.loginfo('tan'+str(oi2follow_coord.shape)+str(oi2follow_coord))
     else:
-        tangent, closest_point = get_tangent_vector(cont_idx)
+        tangent, closest_point = get_tangent_vector2(cont_idx)
         #tangent = refine_tangent(ang2goal, ang2point, tangent)
         rospy.loginfo('new tangent: '+str(tangent))
+        rospy.loginfo('cont idx: '+str(cont_idx_list))
         #tangent = refine_tangent(tangent)
         safe_oi = safety_distance(oi_mat[oi2follow, :], tangent)
         ang2goal = angle2goal(x_goal, y_goal)
@@ -477,6 +512,25 @@ def traj_controller(x_goal, y_goal, vx=0, vy=0):
     global Kp, pos, Vmax, theta, d
     u1 = vx + Kp * (x_goal - pos.x)
     u2 = vy + Kp * (y_goal - pos.y)
+    Vtot = math.sqrt(u1**2 + u2**2)
+    if (Vtot > Vmax):
+        u1 = u1 * Vmax / Vtot
+        u2 = u2 * Vmax / Vtot
+    # feddback linearization
+    A = [
+        [np.cos(theta), -d * np.sin(theta)],
+        [np.sin(theta), d * np.cos(theta)]
+        ]
+    vw = np.linalg.inv(A) @ [[u1], [u2]]
+    v = float(vw[0])
+    w = float(vw[1])
+    
+    return v, w
+
+def traj_controller2(vx, vy):
+    global Kp, pos, Vmax, theta, d
+    u1 = vx
+    u2 = vy
     Vtot = math.sqrt(u1**2 + u2**2)
     if (Vtot > Vmax):
         u1 = u1 * Vmax / Vtot
@@ -544,14 +598,18 @@ def safety_distance(oi_coord, tangent_vec):
     #oi_safe = (oi_dist + wstar) * oi_norm # CHANGED THIS
     #alpha = (1/((oi_dist - wstar)**2 or 2 * wstar))
     if oi_dist > 1.3*wstar:
-        alpha = 4
+        alpha = 1
         beta = 1
     else:
         #alpha = (1/((oi_dist - wstar) or 2 * wstar))
-        alpha = 5
-        beta = 2/(np.linalg.norm(oi_coord) - wstar)
+        alpha = 1
+        beta = 1
+        #beta = 2/(np.linalg.norm(oi_coord) - wstar)
     #alpha = 1.2
-    oi_safe = beta * (oi_coord - (wstar * oi_norm)) + alpha * tangent_vec
+    if state == 0:
+        oi_safe = beta * (oi_coord - (wstar * oi_norm)) + alpha * tangent_vec
+    else:
+        oi_safe = beta * (vec_robot2oi - (wstar * oi_norm)) + alpha * tangent_vec
     #rospy.loginfo('oi: '+str(oi_coord))
     #rospy.loginfo('distdist: '+str(oi_dist))
     #rospy.loginfo('vec: '+str(vec_robot2oi))
@@ -564,7 +622,6 @@ def safety_distance(oi_coord, tangent_vec):
 def motion2goal(x_goal, y_goal):
     """Executes motion to goal behaviour using feedback velocity
     controller with feedback linearization.
-
     Params
     ------
     x_goal: float
@@ -637,7 +694,7 @@ def boundary_following(x_goal, y_goal):
     y_new = oi[1]
     #rospy.loginfo('posnew: '+str(x_new)+' '+str(y_new))
     #rospy.loginfo('d_reach: '+str(d_reach)+' d_followd: '+str(d_followed))
-    v, w = traj_controller(x_new, y_new)
+    v, w = traj_controller2(x_new, y_new)
     if d_reach <= d_followed:
         tan_list = []
         #d_followed = d_reach
