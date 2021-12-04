@@ -39,6 +39,8 @@ d_reach = 0
 d_followed = 0
 states = {0 : 'Motion to Goal', 1 : 'Boundary Following', 2 : 'Reached Goal'}
 tan_list = []
+last_motion_vec = np.array([0.0, 0.0])
+last_motion_ang = 0
 
 def get_laser_params(data):
     """Sets global laser parameters."""
@@ -166,154 +168,7 @@ def get_oi_coord(cont_idx_list):
 
     return oi_mat
 
-def approximate_boundary(coords, lims, N_points = 1000):
-    """Approximates a curve by linear regression as
-    a0 + a1xi + a2xi^2 + a3xiyi + a4yi +a5yi^2 = 0, using sampled
-    coordinates.
-    Params
-    ------
-    coords: np.array
-        A matrix of object coordinates as matrix rows, i.e.
-        [[x0, y0], [x1, y1],..., [xn, yn]].
-    lims: tuple
-        The interval [inf, sup] for which the approximation is desired.
-    N_points: int
-        Number of points to approximate. Default == 1000.
-    Returns
-    -------
-    p: np.array
-        A matrix with each approximated coordinate as matrix rows. 
-        (See <coords>)
-        
-    """
-    M = np.zeros((6,6))
-    coords_copy = coords.copy()
-    coord_std = np.std(coords, axis=0)
-    if np.count_nonzero(coord_std) != 2:
-        idx = np.nonzero(coord_std == 0)
-        coord_std[idx] = 1
-    coord_mean = np.mean(coords, axis=0)
-    coords = (coords - coord_mean) / coord_std
-
-    for coord in coords:
-        xi, yi = coord
-        r = np.array([1, xi, xi**2, xi*yi, yi, yi**2]).reshape(-1, 1)
-        M = M + r @ r.T
-        
-    w, v = np.linalg.eigh(M)
-    a = v[:, 0].reshape(-1, 1)
-
-    A = np.array([
-                    [a[2], a[3] / 2], 
-                    [a[3] / 2, a[5]]
-                ]).reshape(2,2)
-    D, Q = np.linalg.eigh(A)
-    b = np.array([a[1], a[4]]).reshape(-1, 1)
-    c_list = []
-
-    if np.linalg.det(A) >= 1e-3:
-        # c0 + c1*ẍ^2 + c2*ÿ^2=0
-        rospy.loginfo('elipse')
-        c0 = float(a[0]- (b.T @ np.linalg.inv(A) @ b)/ 4)
-        c1, c2 = D
-        c_list.append([c0,c1,c2])
-        rx = np.sqrt(-c0 / c1) 
-        ry = np.sqrt(-c0 / c2)
-        theta_ = np.linspace(0, 2*np.pi, N_points)
-        p_ = np.array([rx, ry]).reshape(-1,1) * [np.cos(theta_), np.sin(theta_)]
-        p = Q @ p_ - (np.linalg.inv(A) @ b / 2)
-
-    elif np.linalg.det(A) <= -1e-3:
-        rospy.loginfo('hiperbole')
-        c0 = float(a[0] - (b.T @ np.linalg.inv(A) @ b)/ 4)
-        c1, c2 = D
-        c_list.append([c0,c1,c2])
-        psi = np.linspace(-20, 20, N_points)
-        x_min, y_min = np.min(coords, axis=0)
-        x_max, y_max = np.max(coords, axis=0)
-        rospy.loginfo('min/max: '+' '+str(x_min)+' '+str(x_max)+' '+str(y_min)+' '+str(y_max))
-        if c0 / c1 > 0:
-            rx = np.sqrt(c0 / c1)
-            ry = np.sqrt(-c0 / c2)
-            psi_min = np.arcsinh(x_min / rx)
-            psi_max = np.arcsinh(x_max / rx)
-            rospy.loginfo('hip_if: '+str(psi_min)+' '+str(psi_max))
-            psi = np.linspace(psi_min, psi_max, N_points)
-            x = rx * np.sinh(psi)
-            y = ry * np.cosh(psi)
-        else:
-            rx = np.sqrt(-c0 / c1)
-            ry = np.sqrt(c0 / c2)
-            psi_min = np.arcsinh(y_min / ry)
-            psi_max = np.arcsinh(y_max / ry)
-            rospy.loginfo('hip_else: '+str(psi_min)+' '+str(psi_max))
-            psi = np.linspace(psi_min, psi_max, N_points)
-            x = rx * np.cosh(psi)
-            y = ry * np.sinh(psi)
-
-        hip_pos = np.c_[x, y] * coord_std + coord_mean
-        hip_neg = np.c_[-x, -y] * coord_std + coord_mean
-        hipp_appr = np.sum(np.min(np.linalg.norm(hip_pos - coords_copy[:, None, :], axis=2), axis=1))
-        hipn_appr = np.sum(np.min(np.linalg.norm(hip_neg - coords_copy[:, None, :], axis=2), axis=1))
-        if hipn_appr < hipp_appr:
-            x = -x
-            y = -y
-
-        #x = np.r_[-x, x]
-        #y = np.r_[-y, y]
-        p_ = np.array([x, y])
-        p = Q @ p_ - (np.linalg.inv(A) @ b / 2)
-
-    else:
-        # c0+c1*ẍ + c2*ÿ + c3*ẍ^2 + c4*ÿ^2 =0
-        rospy.loginfo('parabola')
-        c0 = float(a[0])
-        aux = (b.T @ Q).ravel()
-        c1, c2 = aux
-        c3, c4 = D
-        c_list.append([c0,c1,c2, c3, c4])
-        #t_ = np.linspace(-20, 20, N_points)
-
-        if np.abs(D[0]) < np.abs(D[1]):
-            #lim_inf = (np.min(coords_copy[:, 1])- coord_mean[1]) / coord_std[1]
-            lim_inf = np.min(coords[:, 1])
-            #lim_sup = (np.max(coords_copy[:, 1])- coord_mean[1]) / coord_std[1]
-            lim_sup = np.max(coords[:, 1])
-            rospy.loginfo('ylims: '+str(lim_inf)+' '+str(lim_sup))
-            y = np.linspace(lim_inf - 1, lim_sup + 1, N_points)
-            x = -c0/c1 - c2/c1 * y -c4/c1 * y**2
-        else: 
-            #lim_inf = (np.min(coords_copy[:, 0]) - coord_mean[0]) / coord_std[0]
-            lim_inf = np.min(coords[:, 0])
-            #lim_sup = (np.max(coords_copy[:, 0]) - coord_mean[0]) / coord_std[0]
-            lim_sup = np.max(coords[:, 0])
-            rospy.loginfo('xlims: '+str(lim_inf)+' '+str(lim_sup))
-            x = np.linspace(lim_inf - 1, lim_sup + 1, N_points)
-            y = -c0/c2 - c1/c2 * x -c3/c2 * x**2
-        p_ = np.array([x, y])
-        p = Q @ p_
-
-    p = p * (coord_std).reshape(-1, 1) + coord_mean.reshape(-1, 1)
-
-    return p.T, (w, v, a, A, D, Q, c_list)
-
-def line_approx_boundary(coords, lims, N_points = 1000):
-    lim_inf, lim_sup = lims
-    #coord_std = np.std(coords, axis=0)
-    #if np.count_nonzero(coord_std) != 2:
-    #    idx = np.nonzero(coord_std == 0)
-    #    coord_std[idx] = 1
-    #coord_mean = np.mean(coords, axis=0)
-    #coords_ = (coords - coord_mean) / coord_std
-    coefs = np.polyfit(coords[:, 0], coords[:, 1], 2)
-
-    xt = np.linspace(-9, 10, N_points)
-    xs = np.c_[xt**2, xt, np.ones(xt.shape)]
-    y = xs @ coefs.reshape(-1, 1)
-    p = np.c_[xt, y]
-    return p, (coefs, xs, y)
-
-def get_tangent_vector2(region):
+def get_tangent_vector(region):
     #a = input('DEBUG')
     reg_idx = []
     rospy.loginfo('region: '+str(region))
@@ -336,13 +191,40 @@ def get_tangent_vector2(region):
         sum_ += temp * (pos_vec - oi_mat[i, :])
         div_ += temp
     
+    #rot90 = np.array([
+    #        [np.cos(-np.pi/2), -np.sin(-np.pi/2)],
+    #        [np.sin(-np.pi/2), np.cos(-np.pi/2)]
+    #    ])
     rot90 = np.array([
-            [np.cos(-np.pi/2), -np.sin(-np.pi/2)],
-            [np.sin(-np.pi/2), np.cos(-np.pi/2)]
+            [np.cos(last_motion_ang), -np.sin(last_motion_ang)],
+            [np.sin(last_motion_ang), np.cos(last_motion_ang)]
         ])
-    
+
     D = sum_ / div_
+    norm_tan = D / (np.linalg.norm(D))
+    #norm_tan = D / (np.linalg.norm(D) + 1e-8)
+    nortm_lastmot = last_motion_vec / (np.linalg.norm(last_motion_vec))
+    norm_proj = np.dot(nortm_lastmot, norm_tan)
+    ang_reff = np.arccos(norm_proj)
+    if ang_reff <= np.pi/2:
+        psi = np.pi/2
+    else:
+        psi = -np.pi/2
+    rot902 = np.array([
+            [np.cos(psi), -np.sin(psi)],
+            [np.sin(psi), np.cos(psi)]
+        ])
     tangent = (rot90 @ D.reshape(-1, 1)).ravel()
+    #tangent = (rot902 @ D.reshape(-1, 1)).ravel()
+    norm_tan = tangent / (np.linalg.norm(tangent))
+    #norm_tan = D / (np.linalg.norm(D) + 1e-8)
+    nortm_lastmot = last_motion_vec / (np.linalg.norm(last_motion_vec))
+    norm_proj = np.dot(nortm_lastmot, norm_tan)
+    #diff_vec = last_motion_vec - D
+    ang_reff = np.arccos(norm_proj)
+#    ang_reff = (ang_reff + np.pi) % (2 * np.pi) - np.pi
+    #if np.abs(ang_reff) > 11*np.pi / 20:
+    #    tangent = (rot180 @ tangent.reshape(-1, 1)).ravel()
     rospy.loginfo('tangent: ' + str(tangent))
     closest_point = pos_vec - D
     #closest_point = oi_mat[min_idx, :]
@@ -354,52 +236,6 @@ def get_tangent_vector2(region):
     df2.to_csv('./debugmat.csv')
     
     return tangent, closest_point
-
-def get_tangent_vector(region):
-    lim_inf, lim_sup = region
-    #reg_idx = np.unique(np.linspace(lim_inf, lim_sup, -(-(lim_sup - lim_inf) // 2) + 1, dtype=int))
-    reg_idx = np.unique(np.linspace(lim_inf, lim_sup, -(-3*(lim_sup - lim_inf) // 4) + 1, dtype=int))
-    oi_mat = get_oi_coord(reg_idx)
-    obstacle, _ = approximate_boundary(oi_mat, (lim_inf, lim_sup))
-    rospy.loginfo('obt size: ' + str(obstacle.shape))
-    rospy.loginfo('obt: ' + str(obstacle))
-    vec_obstacle2robot = obstacle - [pos.x, pos.y]
-    dist_obstacle2robot = np.linalg.norm(vec_obstacle2robot, axis=1)
-    min_dist_idx = np.argmin(dist_obstacle2robot)
-    grad_aprox = vec_obstacle2robot[min_dist_idx]
-    norm_grad = np.linalg.norm(grad_aprox)
-    if norm_grad == 0:
-        norm_grad = 1e-3
-    rot90 = np.array([
-            [np.cos(np.pi/2), -np.sin(np.pi/2)],
-            [np.sin(np.pi/2), np.cos(np.pi/2)]
-        ])
-    rospy.loginfo('obstacle: '+str(obstacle))
-    rospy.loginfo('reg: '+str(region))
-    if lim_sup - lim_inf < 5:
-        rospy.loginfo('ranges: '+str(ranges_))
-    rospy.loginfo(str(pos))
-    #rospy.loginfo('mat: '+str(reg_idx))
-    df = pd.DataFrame(obstacle)
-    df.to_csv('./debug.csv')
-    df2 = pd.DataFrame(oi_mat)
-    df2.to_csv('./debugmat.csv')
-    #rospy.loginfo('grad '+str(grad_aprox))
-    tangent_vec = (rot90 @ (grad_aprox / norm_grad).reshape(-1, 1)).ravel()
-    rospy.loginfo('tangent: '+str(tangent_vec))
-    #rospy.loginfo('min_dst '+str(min_dist_idx)+'  '+str(dist_obstacle2robot[min_dist_idx]))
-    
-    #### DEACTIVATE THIS:VVV
-    #tangent_vec = obstacle[min_dist_idx] + tangent_vec.T
-
-    #rospy.loginfo('go to: '+str(tangent_vec))
-    #safet = safety_distance(tangent_vec)
-    #rospy.loginfo('safety: '+str(safet))
-    #rospy.loginfo('tan1 '+str(tangent_vec))
-    closest_point = obstacle[min_dist_idx]
-    #a = input('DEBUG ')
-
-    return tangent_vec, closest_point
 
 def refine_tangent(tangent):
     """Rotates the tangent 180° if current tangent points in the
@@ -481,7 +317,7 @@ def choose_oi(ranges, cont_idx, x_goal, y_goal):
     #a = input('DEBUG')
     if state == 1:
         oi2follow = np.argmin(dist_pos2oi)
-        tangent, closest_point = get_tangent_vector2(cont_idx)
+        tangent, closest_point = get_tangent_vector(cont_idx)
         #tangent = refine_tangent(tangent)
         safe_oi = safety_distance(closest_point, tangent)
         rospy.loginfo('point: '+str(safe_oi))
@@ -489,12 +325,13 @@ def choose_oi(ranges, cont_idx, x_goal, y_goal):
         oi2follow_coord = safe_oi
         #rospy.loginfo('tan'+str(oi2follow_coord.shape)+str(oi2follow_coord))
     else:
-        tangent, closest_point = get_tangent_vector2(cont_idx)
+        tangent, closest_point = get_tangent_vector(cont_idx)
         #tangent = refine_tangent(ang2goal, ang2point, tangent)
         rospy.loginfo('new tangent: '+str(tangent))
         rospy.loginfo('cont idx: '+str(cont_idx_list))
         #tangent = refine_tangent(tangent)
-        safe_oi = safety_distance(oi_mat[oi2follow, :], tangent)
+        #safe_oi = safety_distance(oi_mat[oi2follow, :], tangent)
+        safe_oi = safety_distance(closest_point, tangent)
         ang2goal = angle2goal(x_goal, y_goal)
         ang2point = angle2goal(safe_oi[0], safe_oi[1])
         #new_tangent = refine_tangent(ang2goal, ang2point, tangent)
@@ -507,7 +344,6 @@ def choose_oi(ranges, cont_idx, x_goal, y_goal):
 
     return oi2follow_coord
 
-    
 def traj_controller(x_goal, y_goal, vx=0, vy=0):
     global Kp, pos, Vmax, theta, d
     u1 = vx + Kp * (x_goal - pos.x)
@@ -606,10 +442,11 @@ def safety_distance(oi_coord, tangent_vec):
         beta = 1
         #beta = 2/(np.linalg.norm(oi_coord) - wstar)
     #alpha = 1.2
-    if state == 0:
-        oi_safe = beta * (oi_coord - (wstar * oi_norm)) + alpha * tangent_vec
-    else:
-        oi_safe = beta * (vec_robot2oi - (wstar * oi_norm)) + alpha * tangent_vec
+    #if state == 0:
+    #    oi_safe = beta * (oi_coord - (wstar * oi_norm)) + alpha * tangent_vec
+    #else:
+    #    oi_safe = beta * (vec_robot2oi - (wstar * oi_norm)) + alpha * tangent_vec
+    oi_safe = beta * (vec_robot2oi - (wstar * oi_norm)) + alpha * tangent_vec
     #rospy.loginfo('oi: '+str(oi_coord))
     #rospy.loginfo('distdist: '+str(oi_dist))
     #rospy.loginfo('vec: '+str(vec_robot2oi))
@@ -637,7 +474,7 @@ def motion2goal(x_goal, y_goal):
         The angular velocity given by feedback linearization
     """
     #TODO improve blocking check
-    global d_followed, tan_list
+    global d_followed, tan_list, last_motion_ang
     cont_idx = find_continuities(ranges_)
     blocking, reg_num = check_blocking_oi(cont_idx, x_goal, y_goal)
     
@@ -649,7 +486,7 @@ def motion2goal(x_goal, y_goal):
         #oi_safe = safety_distance(oi)
         oi_safe = oi
         #rospy.loginfo('safe: '+str(oi))
-        v, w = traj_controller(oi_safe[0], oi_safe[1])
+        v, w = traj_controller2(oi_safe[0], oi_safe[1])
 
         if np.linalg.norm(([x_goal, y_goal] - oi_safe)) > d_rob2goal:
             d_followed = d_reach_old
@@ -659,6 +496,15 @@ def motion2goal(x_goal, y_goal):
     else:
         #rospy.loginfo('FREE')
         v, w = traj_controller(x_goal, y_goal)
+        oi_safe = np.array([x_goal, y_goal])
+    
+    last_motion_vec = [pos.x, pos.y] - oi_safe
+    norm_vec = last_motion_vec / np.linalg.norm(last_motion_vec)
+    dot_prod = np.dot(norm_vec, np.array([1, 0]))
+    if np.sign(np.arctan(dot_prod)) == 1:
+        last_motion_ang = np.pi/2
+    else:
+        last_motion_ang = -np.pi/2
     return v, w
 
 def boundary_following(x_goal, y_goal):
