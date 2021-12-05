@@ -4,7 +4,7 @@ include "goal.inc"
 
 # spatial resolution of the underlying occupancy grid. Default is 0.02m.
 resolution 0.02
-# interval_sim 50 # simulation timestep in ms
+#interval_sim 20 # simulation timestep in ms
 
 # configure the GUI window
 window

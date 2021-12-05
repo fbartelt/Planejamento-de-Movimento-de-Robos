@@ -1,0 +1,9 @@
+<launch>
+
+    <arg name="goal" default="4 2"/>
+    <node name="Stage" pkg="stage_ros" type="stageros" args="$(find tangent_bug)/worlds/maze.world">
+    </node>
+
+    <node pkg="tangent_bug" type="tangent_bug_alg.py" name="tangent_bug" args="$(arg goal)" output="screen"/>
+
+</launch>
