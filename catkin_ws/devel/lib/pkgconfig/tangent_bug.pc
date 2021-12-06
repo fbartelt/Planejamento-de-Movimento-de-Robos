@@ -2,7 +2,7 @@ prefix=/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/devel
 
 Name: tangent_bug
 Description: Description of tangent_bug
-Version: 0.0.0
+Version: 3.0.0
 Cflags: 
 Libs: -L${prefix}/lib 
 Requires: 

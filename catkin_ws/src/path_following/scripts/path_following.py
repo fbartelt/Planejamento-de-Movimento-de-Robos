@@ -99,10 +99,10 @@ def run():
     rate = rospy.Rate(20)
     x_goal, y_goal = next(path)
     while not rospy.is_shutdown():
-        
+
         if np.linalg.norm([pos.x - x_goal, pos.y - y_goal]) < err:
             x_goal, y_goal = next(path)
-        
+            
         v, w = traj_controller(x_goal, y_goal)
         twist.linear.x = v
         twist.angular.z = w

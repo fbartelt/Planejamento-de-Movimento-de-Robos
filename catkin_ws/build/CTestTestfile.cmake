@@ -5,7 +5,7 @@
 # This file includes the relevant testing commands required for 
 # testing this directory and lists subdirectories to be tested as well.
 subdirs("gtest")
-subdirs("tangent_bug")
 subdirs("path_following")
 subdirs("potential_function")
+subdirs("tangent_bug")
 subdirs("wavefront")

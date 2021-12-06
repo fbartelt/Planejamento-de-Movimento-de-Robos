@@ -7,7 +7,7 @@ from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion
 import math
 import numpy as np
-import os 
+import os
 
 #User defined
 theta = 0.001 #Angle about z axis
@@ -124,7 +124,7 @@ def wavefront_planner(grid, goal, neighbors=4):
         if not (grid == 0).any() and not state:
             change_state(3)
             break
-
+    
     return wave_grid
 
 def path2goal(wave_grid, position):
@@ -151,6 +151,7 @@ def path2goal(wave_grid, position):
         the coordinate elements in pixels of the next point xp, yp.
 
     """
+    global total_path
     xmax, ymax = wave_grid.shape
     robot_xp, robot_yp = position
     robot_weight = wave_grid[robot_xp, robot_yp]
@@ -168,7 +169,7 @@ def path2goal(wave_grid, position):
         change_state(3)
     
     points = (*coord2follow, *pixel2follow)
-
+    
     return points
 
 def get_laser_params(data):
@@ -244,6 +245,7 @@ def run(x_goal, y_goal, neighbors=4):
         if state != 2:
             if np.linalg.norm([pos.x - x_goal, pos.y - y_goal]) < err:
                 change_state(2)
+
             elif np.linalg.norm([pos.x - x_next, pos.y - y_next]) < err:
                 x_next, y_next, x_px, y_px = path2goal(wave_grid, (x_px, y_px))
             elif state == 3:

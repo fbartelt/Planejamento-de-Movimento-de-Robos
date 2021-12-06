@@ -9,7 +9,6 @@ from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import math
 import numpy as np
-import pandas as pd
 
 #User defined
 theta = 0.001 #Angle about z axis
@@ -214,12 +213,6 @@ def get_tangent_vector(region):
     D = sum_ / div_
     tangent = (rot90 @ D.reshape(-1, 1)).ravel()
     closest_point = pos_vec - D
-    df = pd.DataFrame(closest_point)
-    df.to_csv('./closest.csv')
-    df = pd.DataFrame(pos_vec)
-    df.to_csv('./robot_pos.csv')
-    df2 = pd.DataFrame(oi_mat)
-    df2.to_csv('./debugmat.csv')
     
     return tangent, closest_point
 
@@ -442,7 +435,7 @@ def boundary_following(x_goal, y_goal):
     return v, w
 
 def run(x_goal, y_goal):
-    global pub, counter, d_rob2goal, d_reach, d_followed, bound_pos
+    global pub, counter, d_rob2goal, d_reach, d_followed, bound_pos, path_folowd
     twist = gmsg.Twist()
     rospy.init_node('tangent_bug', anonymous=True)
     pub = rospy.Publisher('robot_0/cmd_vel', gmsg.Twist, queue_size=1)
@@ -450,6 +443,7 @@ def run(x_goal, y_goal):
     pos_sub = rospy.Subscriber('robot_0/base_pose_ground_truth', Odometry, callback_pose, (x_goal, y_goal))
     rate = rospy.Rate(50)
     while not rospy.is_shutdown():
+
         if np.linalg.norm([pos.x - x_goal, pos.y - y_goal]) < err and state != 2:
             change_state(2)
 
