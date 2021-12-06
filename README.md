@@ -22,6 +22,45 @@ Path Following and Wave-Front behavior will not change if only the map is change
 
 ### Tangent Bug
 
+By default it is assumed that the map is [empty.world](./catkin_ws/src/tangent_bug/worlds/maze.world). If any other map is used, the user must edit its launch file, if you are not going to run it manually.
+
+Running with the default map and parameters implies that the goal, the orange square, is set to (4, 2) and the initial robot position is set to (-6, 2). When this goal is reached, it's possible to move the robot with the mouse and rerun the algorithm, such that the robot can converge to the *same* goal from a different initial position.
+
+The algorithm should recognize that it is impossible to reach the goal in some scenarios. For testing this behavior `goal:="0 -11"` is a recommended parameter. The are cases where the algorithm doesn't behave properly, so this goal position and robot's default initial position guarantee that it will work prperly.
+
+#### Launch File
+
+It's possible to run the [Tangent Bug](./catkin_ws/src/tangent_bug/) algorithm using its [launch file](./catkin_ws/src/tangent_bug/launch/tangent_bug.launch). There is a optional argument `goal` that corresponds to the coordinates of the goal in meters as `"x_goal y_goal"`, by default `goal:="4 2"`.
+
+To run *with default parameters*, simply run in terminal:
+
+```zsh
+roslaunch potential_function potential_function.launch
+```
+
+To run with *different parameters*:
+
+```zsh
+roslaunch potential_function potential_function.launch goal:="0 -10"
+```
+
+#### Running Manually
+
+In one terminal run:
+
+```zsh
+roscd tangent_bug
+rosrun stage_ros stageros worlds/maze.world 
+```
+
+In another terminal run:
+
+```zsh
+rosrun tangent_bug tangent_bug_alg.py x y
+```
+
+where `x` is the goal x-coordinate, `y` is the goal y-coordinate.
+
 ### Path Following
 
 By default it is assumed that the map is [empty.world](./catkin_ws/src/path_following/worlds/empty.world). If any other map is used, the user must edit its launch file, if you are not going to run it manually.
@@ -87,7 +126,7 @@ rosrun stage_ros stageros worlds/maze.world
 In another terminal run:
 
 ```zsh
-rosrun potential_function potential_function.py x y n 
+rosrun potential_function potential_function.py x y
 ```
 
 where `x` is the goal x-coordinate, `y` is the goal y-coordinate.
