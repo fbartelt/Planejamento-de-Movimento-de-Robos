@@ -8,11 +8,13 @@ from tf.transformations import euler_from_quaternion
 import math
 import numpy as np
 import os
+import pandas as pd
+import time
 
 #User defined
 theta = 0.001 #Angle about z axis
 err = 0.3 #Position tolerance in meters
-Kp = 5 #Controller proportional gain
+Kp = 3 #Controller proportional gain
 d = 0.1 #For feedback linearization
 Vmax = 1000 #Max velocity for the robot
 height, width = (16, 16) # in meters
@@ -26,7 +28,7 @@ pub = None
 ranges_ = []
 counter = 0
 state = 0
-states = {0 : 'Calculating A* graph', 1 : 'DONE!\nStarted Moving', 
+states = {0 : 'Calculating A* graph\n...', 1 : 'DONE!\nStarted Moving', 
           2 : 'Reached Goal!!!', 3 : 'Impossible to reach goal'}
 
 def meters2pixels(coord):
@@ -48,11 +50,11 @@ def pixels2meters(coord):
     coord_meters = (xm, ym)
     
     return coord_meters
-    
-def traj_controller(x_goal, y_goal, vx=0, vy=0):
+
+def traj_controller(vx, vy):
     global Kp, pos, Vmax, theta, d
-    u1 = vx + Kp * (x_goal - pos.x)
-    u2 = vy + Kp * (y_goal - pos.y)
+    u1 = Kp * vx 
+    u2 = Kp * vy 
     Vtot = math.sqrt(u1**2 + u2**2)
     if (Vtot > Vmax):
         u1 = u1 * Vmax / Vtot
@@ -71,6 +73,12 @@ def traj_controller(x_goal, y_goal, vx=0, vy=0):
 def callback_scan(data):
     global ranges_
     ranges_ = data.ranges
+
+def calc_time(total_sec):
+    m, s = divmod(total_sec, 60)
+    elapsed_time = '{:.2}min {:.2}s'.format(m, s)
+    print('(Elapsed time : {})'.format(elapsed_time))
+
 
 def callback_pose(data):
     global pos, theta
@@ -122,7 +130,6 @@ class A_star:
         self.graph = Graph(start, goal, grid[start[0], start[1]])
         self.O = [] # priority queue
         self.C = set() # visited nodes
-        self.T = []
         self.path = None
 
     def _gen_path(self, node):
@@ -162,6 +169,9 @@ class A_star:
                 self.O.sort(key=lambda x : x.f, reverse=True)
                 
         self._gen_path(ncurr)
+        df = pd.DataFrame(self.path)
+        df.to_csv('/home/fbartelt/Documents/UFMG/Planejamento/logs/astar_path.csv')
+        change_state(1)
 
 def run(x_goal, y_goal, neighbors=4):
     global pub, counter
@@ -179,23 +189,31 @@ def run(x_goal, y_goal, neighbors=4):
     xgoalp, ygoalp = meters2pixels((x_goal, y_goal))
     x0p, y0p = meters2pixels(robot_pos0)
     planner = A_star(grid, (y0p, x0p), (ygoalp, xgoalp))
+    print((x0p, y0p), (xgoalp, ygoalp))
+    change_state(0)
+    sttime = time.time()
     planner.run()
+    edtime = time.time()
+    calc_time(edtime - sttime)
     path = iter(planner.path)
-    next_px = next(path)
-    y_next, x_next = pixels2meters(next_px)
+    ynpx, xnpx = next(path)
+
+    x_next, y_next = pixels2meters((xnpx, ynpx))
 
     while not rospy.is_shutdown():
         if state != 2:
             if np.linalg.norm([pos.x - x_goal, pos.y - y_goal]) < err:
                 change_state(2)
-
             elif np.linalg.norm([pos.x - x_next, pos.y - y_next]) < err:
-                next_px = next(path)
-                y_next, x_next = pixels2meters(next_px)
+                ynpx, xnpx = next(path)
+                x_next, y_next = pixels2meters((xnpx, ynpx))
             elif state == 3:
                 break
 
-            v, w = traj_controller(x_next, y_next, 1, 1)
+            #v, w = traj_controller(x_next, y_next, 1, 1)
+            vx = x_next - pos.x
+            vy = y_next - pos.y
+            v, w = traj_controller(vx, vy)
             twist.linear.x = v
             twist.angular.z = w
             pub.publish(twist)
