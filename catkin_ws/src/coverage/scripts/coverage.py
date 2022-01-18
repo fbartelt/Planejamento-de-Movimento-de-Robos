@@ -9,22 +9,23 @@ import math
 import numpy as np
 import os
 import pandas as pd
-import time
+import pickle
+from collections import deque
 
 #User defined
 theta = 0.001 #Angle about z axis
-err = 0.3 #Position tolerance in meters
-Kp = 3 #Controller proportional gain
+err = 0.05 #Position tolerance in meters
+Kp = 1 #Controller proportional gain
 d = 0.1 #For feedback linearization
 Vmax = 1000 #Max velocity for the robot
 wstar = 0.8 #Safety distance W*
-height, width = (16, 16) # in meters
-scale = 28 # meters / pixel
-robot_pos0 = (-6, 2) # initial position
+height, width = (64, 64) # in meters
+scale = 4 # meters / pixel
+robot_pos0 = (-13.25, 1.25) # initial position
 
 #Laser params
 laser_range_min = 0
-laser_range_max = np.inf
+laser_range_max = 3
 laser_step = 0
 laser_ang_min = 0
 laser_ang_max = 0
@@ -33,11 +34,12 @@ pos = gmsg.Point()
 pos.x = robot_pos0[0]
 pos.y = robot_pos0[1]
 pub = None
-last_motion_ang = 0
+last_motion_ang = -np.pi / 2
 ranges_ = []
 counter = 0
 state = 1
-states = {0 : 'Going back', 1 : 'Moving to new cell'}
+states = {0 : 'Going back', 1 : 'Moving to next cell', 2 : 'Boundary Following',
+          3 : 'Covering', 4 : 'Finished'}
 
 def get_laser_params(data):
     """Sets global laser parameters."""
@@ -95,10 +97,74 @@ def callback_scan(data):
         get_laser_params(data)
     ranges_ = data.ranges
 
-def calc_time(total_sec):
-    m, s = divmod(total_sec, 60)
-    elapsed_time = '{:.2}min {:.2}s'.format(m, s)
-    print('(Elapsed time : {})'.format(elapsed_time))
+def angle2goal(x_goal, y_goal):
+    """Computes the angle to reach the goal in respect to world coords.
+    Used to check if an obstacle is obstructing the straight path.
+    """
+    ang = math.atan2(y_goal - pos.y, x_goal - pos.x) - theta
+    ang = (ang + np.pi) % (2 * np.pi) - np.pi # get angle in [-pi, pi)
+    
+    return ang
+
+def check_blocking_oi(cont_idx, x_goal, y_goal):
+    #TODO check if robot will collide even when goal is visible
+    """Checks if any Oi is blocking the path to goal by angle 
+    comparison.
+    
+    Params
+    ------
+    cont_idx: list
+        A list of tuples that define a continuity region by means of
+        LaserScan indices.
+    x_goal: float
+        The horizontal coordinate of the goal
+    y_goal: float
+        The vertical coordinate of the goal    
+    
+    Returns
+    -------
+    blocking: boolean
+        Indicates whether an Oi is blocking the path to goal
+    reg_num: int or None
+        The region number that is blocking the path to goal, i.e. the
+        index of <cont_idx> that represents the blocking region. If
+        <blocking> == False, this value is None
+    """
+    ang2g = angle2goal(x_goal, y_goal)
+    reg_num = None
+    blocking = False
+    pos_vec = np.array([pos.x, pos.y])
+    goal_vec = np.array([x_goal, y_goal])
+    d_rob2goal = np.linalg.norm(pos_vec - goal_vec)
+
+    for i, region in enumerate(cont_idx):
+        #print(region, end='; ')
+        lim_inf = laser_step * region[0] + laser_ang_min
+        lim_sup = laser_step * region[1] + laser_ang_min
+        if lim_inf <= ang2g <= lim_sup:
+            #print('ang')
+            lim_infp, lim_supp = region
+            idxs = np.unique(np.linspace(lim_infp, lim_supp, lim_supp - lim_infp + 1, dtype=int))
+            #oi_mat = get_oi_coord(list(region))
+            oi_mat = get_oi_coord(idxs)
+            norm_mat = np.linalg.norm(pos_vec - oi_mat, axis=1)
+            oi_inf_dist = np.min(norm_mat)
+            oi_sup_dist = np.max(norm_mat)
+            #oi_inf_dist = np.linalg.norm(oi_mat[0] - np.array([pos.x, pos.y]))
+            #oi_sup_dist = np.linalg.norm(oi_mat[1] - np.array([pos.x, pos.y]))
+            #print(d_rob2goal, oi_inf_dist, oi_sup_dist)
+            #reg_num = 1
+            #blocking = True
+            #break
+            if oi_inf_dist + 24*err <= d_rob2goal or oi_sup_dist+24*err <= d_rob2goal:
+                blocking = True
+                #print(f'State:{state}')
+                #print('Blocked by: ', i, 'dgoal:', d_rob2goal, f'dmax, dmin:{oi_sup_dist, oi_inf_dist}')
+                #print(f'Max, min coord:{oi_mat[np.argmax(norm_mat), :], oi_mat[np.argmin(norm_mat), :]}')
+                reg_num = i
+                break
+
+    return blocking, reg_num
 
 def callback_pose(data):
     global pos, theta
@@ -198,6 +264,7 @@ def get_tangent_vector(region):
         The closest approximated point.
     """
     reg_idx = []
+    region = find_continuities()
 
     if isinstance(region, tuple):
         region = [region]
@@ -300,30 +367,18 @@ def motion2goal(x_goal, y_goal):
     """
     #TODO improve blocking check
     global d_followed, tan_list, last_motion_ang, bound_pos
-    cont_idx = find_continuities(ranges_)
-    blocking, reg_num = check_blocking_oi(cont_idx, x_goal, y_goal)
     
-    if blocking:
-        d_reach_old = d_reach
-        oi = choose_oi(ranges_, cont_idx[reg_num], x_goal, y_goal)
-        oi_safe = oi
-        v, w = traj_controller2(oi_safe[0], oi_safe[1])
-
-        if np.linalg.norm(([x_goal, y_goal] - oi_safe)) > d_rob2goal:
-            d_followed = d_reach_old
-            tan_list = []
-            change_state(1)
-    else:
-        v, w = traj_controller(x_goal, y_goal)
-        oi_safe = np.array([x_goal, y_goal])
+    vec = np.array([x_goal, y_goal]) - [pos.x, pos.y]
+    v, w = traj_controller(vec[0], vec[1])
+    oi_safe = np.array([x_goal, y_goal])
     
-    last_motion_vec = [pos.x, pos.y] - oi_safe
-    norm_vec = last_motion_vec / np.linalg.norm(last_motion_vec)
-    dot_prod = np.dot(norm_vec, np.array([1, 0]))
-    if np.sign(np.arctan(dot_prod) + 2*np.pi) == 1:
-        last_motion_ang = np.pi/2
-    else:
-        last_motion_ang = -np.pi/2
+    #last_motion_vec = [pos.x, pos.y] - oi_safe
+    #norm_vec = last_motion_vec / np.linalg.norm(last_motion_vec)
+    #dot_prod = np.dot(norm_vec, np.array([1, 0]))
+    #if np.sign(np.arctan(dot_prod) + 2*np.pi) == 1:
+    #    last_motion_ang = np.pi/2
+    #else:
+    #    last_motion_ang = -np.pi/2
     return v, w
 
 class Cell:
@@ -455,58 +510,167 @@ def gen_path(cells, init_pos, total_cells, init_cell=-1):
 
     return seen, visited
 
-def run(x_goal, y_goal, neighbors=4):
-    global pub, counter
-    print(f'\nGoal set to ({x_goal}, {y_goal}). Using {neighbors} neighbors connectivity.\n')
+def run():
+    global pub
     twist = gmsg.Twist()
-    rospy.init_node('Astar', anonymous=True)
-    pub = rospy.Publisher('robot_0/cmd_vel', gmsg.Twist, queue_size=1)
-    rospy.Subscriber('robot_0/base_scan', LaserScan, callback_scan)
-    rospy.Subscriber('robot_0/base_pose_ground_truth', Odometry, callback_pose)
+    rospy.init_node('Coverage', anonymous=True)
+    pub = rospy.Publisher('/cmd_vel', gmsg.Twist, queue_size=1)
+    rospy.Subscriber('/base_scan', LaserScan, callback_scan)
+    rospy.Subscriber('/base_pose_ground_truth', Odometry, callback_pose)
     rate = rospy.Rate(1000)
-    
+    counter = 0
+    last_counter = 0
     curr_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    grid_path = os.path.join(curr_path, 'worlds/grid1.npy')
-    grid = np.load(grid_path)
-    xgoalp, ygoalp = meters2pixels((x_goal, y_goal))
+    decomposition_path = os.path.join(curr_path, 'worlds/trapz_dec.pickle')
+    
+    with open(decomposition_path, 'rb') as handle:
+        cells_list = pickle.load(handle)
     x0p, y0p = meters2pixels(robot_pos0)
-    planner = A_star(grid, (y0p, x0p), (ygoalp, xgoalp))
-    print((x0p, y0p), (xgoalp, ygoalp))
-    change_state(0)
-    sttime = time.time()
-    planner.run()
-    edtime = time.time()
-    calc_time(edtime - sttime)
-    path = iter(planner.path)
-    ynpx, xnpx = next(path)
-
-    x_next, y_next = pixels2meters((xnpx, ynpx))
+    _, planned_path = gen_path(cells_list, (x0p, y0p), 15, cells_list[0])
+    path = planned_path[::-1]
+    print([x.val for x in path])
+    input()
+    visited = set()
+    curr_C = path.pop()
+    visited.add(curr_C)
+    change_state(1)
+    x_next, y_next = pixels2meters(curr_C.left_corner)
+    print('next point:', x_next, y_next)
+    cover_dir = deque(['d', 'r', 'u', 'r'])
+    bound_f = ''
+    temp = ''
+    l, r = 0, 0
 
     while not rospy.is_shutdown():
-        if state != 2:
-            if np.linalg.norm([pos.x - x_goal, pos.y - y_goal]) < err:
-                change_state(2)
-            elif np.linalg.norm([pos.x - x_next, pos.y - y_next]) < err:
-                ynpx, xnpx = next(path)
-                x_next, y_next = pixels2meters((xnpx, ynpx))
-            elif state == 3:
-                break
+        #print(x_next, y_next)
+        left_corner = np.array(pixels2meters(curr_C.left_corner))
+        right_corner = np.array(pixels2meters(curr_C.right_corner))
+        cont_idx = find_continuities()
+        blocking, _ = check_blocking_oi(cont_idx, x_next, y_next)
 
-            #v, w = traj_controller(x_next, y_next, 1, 1)
-            vx = x_next - pos.x
-            vy = y_next - pos.y
-            v, w = traj_controller(vx, vy)
-            twist.linear.x = v
-            twist.angular.z = w
-            pub.publish(twist)
-            counter += 1
-            rate.sleep()
+        if not path:
+            change_state(4)
+
+        if state == 0:
+            if np.linalg.norm(left_corner - [pos.x, pos.y]) < 7*err and counter > last_counter + 15:
+                curr_C = path.pop()
+
+                if curr_C in visited:
+                    change_state(0)
+                    last_counter = counter
+                else:
+                    visited.add(curr_C)
+                    change_state(1)
+                    last_counter = counter
+                
+                cover_dir = deque(['d', 'r', 'u', 'r'])
+                x_next, y_next = pixels2meters(curr_C.left_corner)
+                print('next point:', x_next, y_next)
+
+            elif blocking:
+                v, w = boundary_following()
+            else:
+                v, w = motion2goal(x_next, y_next)
+            
+        elif state == 1:
+            if np.linalg.norm(left_corner - [pos.x, pos.y]) < 30*err  and counter > last_counter + 15:
+                change_state(2)
+                last_counter = counter
+                #print(left_corner, right_corner)
+            elif blocking:
+                v, w = boundary_following()
+                #print(v, w)
+                #input()
+            else:
+                v, w = motion2goal(x_next, y_next)
+
+        elif state == 2:
+            #print(pos.x, pos.y, np.linalg.norm(left_corner - [pos.x, pos.y]))
+            if np.linalg.norm(left_corner - [pos.x, pos.y]) <= 20*err  and counter > last_counter + 60:
+                change_state(3)
+                last_counter = counter
+                bound_f = ''
+            elif blocking:
+                v, w = boundary_following()
+            elif right_corner[0] - pos.x <= 0.1 or bound_f == 'u':
+                #print('up')
+                v, w = motion2goal(pos.x, height / 2)
+                x_next = pos.x
+                y_next = height / 2
+                bound_f = 'u'
+            elif left_corner[0] - pos.x >= 0.1 or bound_f == 'd':
+                #print('down')
+                v, w = motion2goal(pos.x, -height / 2)
+                x_next = pos.x
+                y_next = -height / 2
+                bound_f = 'd'
+            else:
+                v, w = boundary_following()
+
+        elif state == 3:
+            goal = np.array([x_next, y_next])
+            
+            if right_corner[0] - pos.x < 0.1:
+                cover_dir = deque(['u', 'r', 'd', 'r'])
+                r = 1
+            elif left_corner[0] - pos.x > 0.1:
+                cover_dir = deque(['d', 'r', 'u', 'r'])
+                l = 1
+            elif blocking and counter > last_counter + 45:
+                cover_dir.rotate(-1)
+            elif np.linalg.norm(goal - [pos.x, pos.y]) <= 2*err  and counter > last_counter + 45:
+                 cover_dir.rotate(-1)
+
+            if np.linalg.norm(right_corner - [pos.x, pos.y]) <= 20*err  and counter > last_counter + 15:
+                curr_C = path.pop()
+
+                if curr_C in visited:
+                    change_state(0)
+                    last_counter = counter
+                else:
+                    visited.add(curr_C)
+                    change_state(1)
+                    last_counter = counter
+                
+                cover_dir = deque(['d', 'r', 'u', 'r'])
+                x_next, y_next = pixels2meters(curr_C.left_corner)
+                print('next point:', x_next+1.3, y_next+1.3)
+                
+            elif cover_dir[0] == 'd':
+                #print('d')
+                if temp != 'd':
+                    x_next, y_next = pos.x + 0.2 * l, -height / 2
+                    temp = 'd'
+                else:
+                    temp = 'd'
+            elif cover_dir[0] == 'r':
+                #print('r')
+                if temp != 'r':
+                    x_next, y_next = pos.x + 0.4, pos.y
+                    temp = 'r'
+                else:
+                    temp = 'r'
+            elif cover_dir[0] == 'u':
+                #print('u')
+                if temp != 'u':
+                    x_next, y_next = pos.x - 0.2 * r, height / 2
+                    temp = 'u'
+                else:
+                    temp = 'u'
+            else:
+                #print('l')
+                x_next, y_next = pos.x - 1, pos.y + 0.1
+            
+            v, w = motion2goal(x_next, y_next)
+
+        twist.linear.x = v
+        twist.angular.z = w
+        pub.publish(twist)
+        counter += 1
+        rate.sleep()
             
 if __name__ == '__main__':
     try:
-        x_goal = float(sys.argv[1])
-        y_goal = float(sys.argv[2])
-        neighbors = int(sys.argv[3])
-        run(x_goal, y_goal, neighbors)
+        run()
     except rospy.ROSInterruptException:
         pass
