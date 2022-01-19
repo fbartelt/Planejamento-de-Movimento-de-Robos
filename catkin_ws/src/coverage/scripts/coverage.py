@@ -21,7 +21,8 @@ Vmax = 1000 #Max velocity for the robot
 wstar = 0.8 #Safety distance W*
 height, width = (64, 64) # in meters
 scale = 4 # meters / pixel
-robot_pos0 = (-13.25, 1.25) # initial position
+#robot_pos0 = (-13.25, 1.25) # initial position
+robot_pos0 = (-27, 1.25) # initial position
 
 #Laser params
 laser_range_min = 0
@@ -156,7 +157,8 @@ def check_blocking_oi(cont_idx, x_goal, y_goal):
             #reg_num = 1
             #blocking = True
             #break
-            if oi_inf_dist + 24*err <= d_rob2goal or oi_sup_dist+24*err <= d_rob2goal:
+            margin = 24 * err * (state!=2)
+            if oi_inf_dist + margin <= d_rob2goal or oi_sup_dist + margin <= d_rob2goal:
                 blocking = True
                 #print(f'State:{state}')
                 #print('Blocked by: ', i, 'dgoal:', d_rob2goal, f'dmax, dmin:{oi_sup_dist, oi_inf_dist}')
@@ -536,6 +538,8 @@ def run():
     change_state(1)
     x_next, y_next = pixels2meters(curr_C.left_corner)
     print('next point:', x_next, y_next)
+    print('curr left corner:', curr_C.left_corner,'right corner:', curr_C.right_corner)
+    print('curr left corner[m]:', pixels2meters(curr_C.left_corner),'right corner[m]:', pixels2meters(curr_C.right_corner))
     cover_dir = deque(['d', 'r', 'u', 'r'])
     bound_f = ''
     temp = ''
@@ -573,7 +577,7 @@ def run():
                 v, w = motion2goal(x_next, y_next)
             
         elif state == 1:
-            if np.linalg.norm(left_corner - [pos.x, pos.y]) < 30*err  and counter > last_counter + 15:
+            if np.linalg.norm(left_corner - [pos.x, pos.y]) < 7*err  and counter > last_counter + 15:
                 change_state(2)
                 last_counter = counter
                 #print(left_corner, right_corner)
@@ -585,35 +589,37 @@ def run():
                 v, w = motion2goal(x_next, y_next)
 
         elif state == 2:
+            
             #print(pos.x, pos.y, np.linalg.norm(left_corner - [pos.x, pos.y]))
-            if np.linalg.norm(left_corner - [pos.x, pos.y]) <= 20*err  and counter > last_counter + 60:
+            if np.linalg.norm(left_corner - [pos.x, pos.y]) <= 6*err  and counter > last_counter + 45:
                 change_state(3)
                 last_counter = counter
                 bound_f = ''
-            elif blocking:
-                v, w = boundary_following()
+            #elif blocking:
+            #    v, w = boundary_following()
             elif right_corner[0] - pos.x <= 0.1 or bound_f == 'u':
                 #print('up')
-                v, w = motion2goal(pos.x, height / 2)
-                x_next = pos.x
+                x_next = right_corner[0] - 0.2
                 y_next = height / 2
+                v, w = motion2goal(x_next, y_next)
                 bound_f = 'u'
-            elif left_corner[0] - pos.x >= 0.1 or bound_f == 'd':
+            elif left_corner[0] - pos.x >= -0.1 or bound_f == 'd':
                 #print('down')
-                v, w = motion2goal(pos.x, -height / 2)
-                x_next = pos.x
+                x_next = left_corner[0] + 0.2
                 y_next = -height / 2
+                v, w = motion2goal(x_next, y_next)
                 bound_f = 'd'
-            else:
+            if blocking:
                 v, w = boundary_following()
+                bound_f = ''
 
         elif state == 3:
             goal = np.array([x_next, y_next])
             
-            if right_corner[0] - pos.x < 0.1:
-                cover_dir = deque(['u', 'r', 'd', 'r'])
-                r = 1
-            elif left_corner[0] - pos.x > 0.1:
+            #if right_corner[0] - pos.x < 0.1:
+            #    cover_dir = deque(['u', 'r', 'd', 'r'])
+            #    r = 1
+            if left_corner[0] - pos.x > 0.1:
                 cover_dir = deque(['d', 'r', 'u', 'r'])
                 l = 1
             elif blocking and counter > last_counter + 45:
@@ -623,6 +629,8 @@ def run():
 
             if np.linalg.norm(right_corner - [pos.x, pos.y]) <= 20*err  and counter > last_counter + 15:
                 curr_C = path.pop()
+                print('curr left corner:', curr_C.left_corner,'right corner:', curr_C.right_corner)
+                print('curr left corner[m]:', pixels2meters(curr_C.left_corner),'right corner[m]:', pixels2meters(curr_C.right_corner))
 
                 if curr_C in visited:
                     change_state(0)
@@ -631,10 +639,10 @@ def run():
                     visited.add(curr_C)
                     change_state(1)
                     last_counter = counter
-                
+                print('next cell:', curr_C.val)
                 cover_dir = deque(['d', 'r', 'u', 'r'])
                 x_next, y_next = pixels2meters(curr_C.left_corner)
-                print('next point:', x_next+1.3, y_next+1.3)
+                print('next point:', x_next, y_next)
                 
             elif cover_dir[0] == 'd':
                 #print('d')
@@ -646,7 +654,7 @@ def run():
             elif cover_dir[0] == 'r':
                 #print('r')
                 if temp != 'r':
-                    x_next, y_next = pos.x + 0.4, pos.y
+                    x_next, y_next = np.minimum(pos.x + 0.4, right_corner[0]), pos.y
                     temp = 'r'
                 else:
                     temp = 'r'
