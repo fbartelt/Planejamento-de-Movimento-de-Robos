@@ -336,6 +336,15 @@ def choose_oi(cont_idx):
 
     return velocity
 
+def check_nonstationary(initial, points):
+    if points.size == 0:
+        return False
+    pos_vec = np.array(initial)
+    dists = np.linalg.norm(pos_vec - points, axis=1)
+    nonstationary = any(dists >= 2)
+
+    return nonstationary
+
 def boundary_following():
     cont_lims = find_continuities()
 
@@ -513,7 +522,7 @@ def gen_path(cells, init_pos, total_cells, init_cell=-1):
     return seen, visited
 
 def run():
-    global pub
+    global pub, last_motion_ang
     twist = gmsg.Twist()
     rospy.init_node('Coverage', anonymous=True)
     pub = rospy.Publisher('/cmd_vel', gmsg.Twist, queue_size=1)
@@ -544,6 +553,8 @@ def run():
     bound_f = ''
     temp = ''
     l, r = 0, 0
+    passed_by = np.array([[]])
+    point_from = np.array([pos.x, pos.y])
 
     while not rospy.is_shutdown():
         #print(x_next, y_next)
@@ -551,12 +562,13 @@ def run():
         right_corner = np.array(pixels2meters(curr_C.right_corner))
         cont_idx = find_continuities()
         blocking, _ = check_blocking_oi(cont_idx, x_next, y_next)
+        nonstat = check_nonstationary(point_from, passed_by)
 
         if not path:
             change_state(4)
 
         if state == 0:
-            if np.linalg.norm(left_corner - [pos.x, pos.y]) < 7*err and counter > last_counter + 15:
+            if np.linalg.norm(left_corner - [pos.x, pos.y]) < 7*err and nonstat:
                 curr_C = path.pop()
 
                 if curr_C in visited:
@@ -569,6 +581,8 @@ def run():
                 
                 cover_dir = deque(['d', 'r', 'u', 'r'])
                 x_next, y_next = pixels2meters(curr_C.left_corner)
+                point_from = np.array([pos.x, pos.y])
+                passed_by = np.array([[]])
                 print('next point:', x_next, y_next)
 
             elif blocking:
@@ -577,9 +591,11 @@ def run():
                 v, w = motion2goal(x_next, y_next)
             
         elif state == 1:
-            if np.linalg.norm(left_corner - [pos.x, pos.y]) < 7*err  and counter > last_counter + 15:
+            if np.linalg.norm(left_corner - [pos.x, pos.y]) < 7*err:
                 change_state(2)
                 last_counter = counter
+                point_from = np.array([pos.x, pos.y])
+                passed_by = np.array([[]])
                 #print(left_corner, right_corner)
             elif blocking:
                 v, w = boundary_following()
@@ -591,9 +607,11 @@ def run():
         elif state == 2:
             
             #print(pos.x, pos.y, np.linalg.norm(left_corner - [pos.x, pos.y]))
-            if np.linalg.norm(left_corner - [pos.x, pos.y]) <= 6*err  and counter > last_counter + 45:
+            if np.linalg.norm(left_corner - [pos.x, pos.y]) <= 9*err  and nonstat:
                 change_state(3)
                 last_counter = counter
+                point_from = np.array([pos.x, pos.y])
+                passed_by = np.array([[]])
                 bound_f = ''
             #elif blocking:
             #    v, w = boundary_following()
@@ -619,15 +637,18 @@ def run():
             #if right_corner[0] - pos.x < 0.1:
             #    cover_dir = deque(['u', 'r', 'd', 'r'])
             #    r = 1
-            if left_corner[0] - pos.x > 0.1:
-                cover_dir = deque(['d', 'r', 'u', 'r'])
-                l = 1
-            elif blocking and counter > last_counter + 45:
+            #if left_corner[0] - pos.x > 0.1:
+            #    cover_dir = deque(['d', 'r', 'u', 'r'])
+            #    l = 1
+            if blocking:
+                print('bbb', end='')
                 cover_dir.rotate(-1)
-            elif np.linalg.norm(goal - [pos.x, pos.y]) <= 2*err  and counter > last_counter + 45:
+                temp = ''
+            elif np.linalg.norm(goal - [pos.x, pos.y]) <= 20*err  and nonstat:
                  cover_dir.rotate(-1)
+                 temp = ''
 
-            if np.linalg.norm(right_corner - [pos.x, pos.y]) <= 20*err  and counter > last_counter + 15:
+            if np.linalg.norm(right_corner - [pos.x, pos.y]) <= 20*err  and nonstat:
                 curr_C = path.pop()
                 print('curr left corner:', curr_C.left_corner,'right corner:', curr_C.right_corner)
                 print('curr left corner[m]:', pixels2meters(curr_C.left_corner),'right corner[m]:', pixels2meters(curr_C.right_corner))
@@ -642,34 +663,47 @@ def run():
                 print('next cell:', curr_C.val)
                 cover_dir = deque(['d', 'r', 'u', 'r'])
                 x_next, y_next = pixels2meters(curr_C.left_corner)
+                point_from = np.array([pos.x, pos.y])
+                passed_by = np.array([[]])
                 print('next point:', x_next, y_next)
                 
             elif cover_dir[0] == 'd':
                 #print('d')
                 if temp != 'd':
-                    x_next, y_next = pos.x + 0.2 * l, -height / 2
+                    #x_next, y_next = pos.x + 0.2 * l, -height / 2
+                    x_next, y_next = np.minimum(pos.x, right_corner[0] - 0.2), -height / 2
                     temp = 'd'
                 else:
                     temp = 'd'
             elif cover_dir[0] == 'r':
                 #print('r')
                 if temp != 'r':
-                    x_next, y_next = np.minimum(pos.x + 0.4, right_corner[0]), pos.y
-                    temp = 'r'
-                else:
-                    temp = 'r'
+                    x_next, y_next = np.minimum(pos.x + 0.4, right_corner[0] - 0.2), pos.y
+                    print('position', pos.x + 0.4)
+                    print('corner limited', right_corner[0] - 0.2)
+                temp = 'r'
+                #else:
+                #    temp = 'r'
             elif cover_dir[0] == 'u':
                 #print('u')
                 if temp != 'u':
-                    x_next, y_next = pos.x - 0.2 * r, height / 2
+                    #x_next, y_next = pos.x - 0.2 * r, height / 2
+                    x_next, y_next = np.minimum(pos.x, right_corner[0] - 0.2), height / 2
                     temp = 'u'
                 else:
                     temp = 'u'
             else:
                 #print('l')
                 x_next, y_next = pos.x - 1, pos.y + 0.1
-            
             v, w = motion2goal(x_next, y_next)
+            if not counter % 151:
+                print('at', (pos.x, pos.y), '  to', (x_next, y_next))
+                print('temp', temp, 'stat', nonstat)
+        
+        if passed_by.size !=0:
+            passed_by = np.r_[passed_by, [[pos.x, pos.y]]]
+        else:
+            passed_by = np.array([[pos.x, pos.y]])
 
         twist.linear.x = v
         twist.angular.z = w
