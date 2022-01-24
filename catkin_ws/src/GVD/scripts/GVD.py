@@ -11,6 +11,7 @@ from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import math
 import pandas as pd
+import pickle
 import numpy as np
 
 #User defined
@@ -20,6 +21,11 @@ wstar = 0.8 #Safety distance W*
 Kp = 1 #Controller proportional gain
 d = 0.1 #For feedback linearization
 Vmax = 100 #Max velocity for the robot
+zeta = 5
+d_star = 3
+eta = 10
+Q_star = 1.5
+alpha = 0.1
 
 #Laser params
 laser_range_min = 0
@@ -191,6 +197,9 @@ def obstacle_tangent_normal(region):
         The closest approximated point.
     """
     reg_idx = []
+
+    if not region:
+        return 0, 0
 
     if isinstance(region, tuple):
         region = [region]
@@ -443,6 +452,80 @@ def boundary_following(x_goal, y_goal):
 
     return v, w
 
+def get_oi_config(ranges_idx_list):
+    """Returns a matrix with the configuration of each obstacle.
+
+    Params
+    ------
+    ranges_idx_list: list
+        A list of each <ranges> indices that contains a Oi (endpoint).
+    
+    Returns
+    -------
+    qoi_mat: np.array
+        A matrix that contains each endpoint Oi configuration as a row 
+        vector, i.e. 
+        [ [Oi1_x, Oi1_y], ..., [Oin_x, Oin_y] ].
+
+    """
+    qoi_mat = np.empty((len(ranges_idx_list), 2))
+    for i, x in enumerate(ranges_idx_list):
+        oi_coord = range2cart(ranges_, int(x))
+        qoi_mat[i, :] = oi_coord
+
+    return qoi_mat
+
+def repulsive_potential(q):
+    """Implements a repulsive potential as a sum of every repulsive
+    potential given by each obstacle in sight. If the robot is more
+    than <Q_star> meters from the obstacle, the potential function is
+    zero.
+
+    Params
+    ------
+    q: np.array
+        The robot's current configuration
+
+    Returns
+    -------
+    U_rep: float
+        The total repulsive potential value
+    grad_Urep: np.array
+        The total repulsive potential gradient
+    """
+    U_rep = 0
+    grad_Urep = np.array([0.0, 0.0])
+    regions = find_continuities()
+
+    for obstacle in regions:
+        obs_inf, obs_sub = obstacle
+        range_idx_list = np.unique(np.arange(obs_inf, obs_sub, dtype=np.int64))
+        qoi_mat = get_oi_config(range_idx_list)
+        d_c = np.linalg.norm((q - qoi_mat), axis=1)
+        idx_minc = np.argmin(d_c)
+        d_qqobs = d_c[idx_minc] - 0.4
+        c = qoi_mat[idx_minc, :]
+        grad_d = (q - c) / d_qqobs
+        
+        #if d_qqobs <= Q_star:
+        eta = 50
+        if True:
+            U_rep += 0.5 * eta * (1 / d_qqobs - 0 * (1 / Q_star))**2
+            grad_Urep += eta * ((1 / Q_star)*0 - 1 / d_qqobs) * (1 / (d_qqobs ** 2)) * grad_d
+        else:
+            U_rep += 0
+            grad_Urep += 0 
+    return U_rep, grad_Urep
+
+def set_tan_ang(tangent):
+    global last_motion_ang
+    last_motion_vec = tangent
+    norm_vec = last_motion_vec / (np.linalg.norm(last_motion_vec) + 1e-3)
+    dot_prod = np.dot(norm_vec, np.array([1, 0]))
+    if np.sign(np.arctan(dot_prod) + 2*np.pi) == 1:
+        last_motion_ang = np.pi/2
+    else:
+        last_motion_ang = -np.pi/2
 class GVD:
     def __init__(self):
         self.edges = set()
@@ -464,13 +547,42 @@ def run():
     pos_sub = rospy.Subscriber('/base_pose_ground_truth', Odometry, callback_pose, (0, 0))
     rate = rospy.Rate(1000)
     change_state(0)
+    gvd = GVD()
     w = 0
     ref = 0
+    rate.sleep()
 
     while not rospy.is_shutdown():
         regions = find_continuities()
+        q = np.array([pos.x, pos.y])
+        _, grad_Urep = repulsive_potential(q)
+        U_grad = - grad_Urep
+        if np.linalg.norm(U_grad) <= 0.6 or state == 1:
+            gvd.add_edge((round(pos.x, 1), round(pos.y, 1)))
+        if state == 0 and np.linalg.norm(U_grad) <= 0.1:
+            change_state(1)
+            tangent, normal = obstacle_tangent_normal(regions)
+            set_tan_ang(tangent)
+            print('tangent', tangent, np.linalg.norm(tangent))
+            U_grad = tangent - grad_Urep
+            input('going tangent ')
+        elif state == 1:
+            if np.linalg.norm(U_grad) > 0.6:
+                change_state(0)
+            else:
+                U_grad = tangent
+        print('repulsive', U_grad, np.linalg.norm(U_grad))
+        v, w = traj_controller2(U_grad[0], U_grad[1])
+        twist.linear.x = v
+        twist.angular.z = w
+        pub.publish(twist)
+        if counter != 0 and counter % 100 == 0:
+            with open('/home/fbartelt/Documents/UFMG/Planejamento/logs/GVD.pickle', 'wb') as handle:
+                pickle.dump(gvd, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                print('\n'*4+'PICKLEEEEEEEEEEEEEEEE'+'\n'*2)
+            input('pickled')
 
-        if ranges_ and state == 0:
+        """ if ranges_ and state == 0:
             min_dist_idx = np.argmin(ranges_)
 
             if ranges_[min_dist_idx] < laser_range_max:
@@ -531,8 +643,16 @@ def run():
         elif state == 4:
             #input()
             _, normal = obstacle_tangent_normal(regions)
+            gvd.add_edge((round(pos.x, 1), round(pos.y, 1)))
+            if counter > 100:
+                with open('/home/fbartelt/Documents/UFMG/Planejamento/logs/GVD.pickle', 'wb') as handle:
+                    pickle.dump(gvd, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                    print('\n'*4+'PICKLEEEEEEEEEEEEEEEE'+'\n'*2)
+                    input('pickled')
+
             print(tangent, normal)
             input(f'SAVED, diff: {diff}, len_{len(regions)}')
+            print(f'counter {counter}')
             #input()
             a = laser_range_max
             total_lasers = len(ranges_)
@@ -551,7 +671,7 @@ def run():
                     twist.angular.z = w
                     pub.publish(twist)
                     if diff == 0:
-                        change_state(0)
+                        change_state(0) """
 
             #if diff > 6*err:
             #    change_state(0)
