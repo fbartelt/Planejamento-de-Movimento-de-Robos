@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from matplotlib.pyplot import close
 import rospy
 import sys
 import geometry_msgs.msg as gmsg
@@ -40,7 +41,7 @@ ranges_ = []
 counter = 0
 state = 1
 states = {0 : 'Going back', 1 : 'Moving to next cell', 2 : 'Boundary Following',
-          3 : 'Covering', 4 : 'Finished'}
+          3 : 'Covering (right)', 4 : 'Finished', 6 : 'Covering (down)', 9 : 'Covering (up)'}
 
 def get_laser_params(data):
     """Sets global laser parameters."""
@@ -145,7 +146,8 @@ def check_blocking_oi(cont_idx, x_goal, y_goal):
         if lim_inf <= ang2g <= lim_sup:
             #print('ang')
             lim_infp, lim_supp = region
-            idxs = np.unique(np.linspace(lim_infp, lim_supp, lim_supp - lim_infp + 1, dtype=int))
+            #idxs = np.unique(np.linspace(lim_infp, lim_supp, lim_supp - lim_infp + 1, dtype=int))
+            idxs = np.unique(np.arange(lim_infp, lim_supp, 1, dtype=int))
             #oi_mat = get_oi_coord(list(region))
             oi_mat = get_oi_coord(idxs)
             norm_mat = np.linalg.norm(pos_vec - oi_mat, axis=1)
@@ -157,7 +159,7 @@ def check_blocking_oi(cont_idx, x_goal, y_goal):
             #reg_num = 1
             #blocking = True
             #break
-            margin = 24 * err * (state!=2)
+            margin = 10 * err * (state!=2)
             if oi_inf_dist + margin <= d_rob2goal or oi_sup_dist + margin <= d_rob2goal:
                 blocking = True
                 #print(f'State:{state}')
@@ -268,11 +270,15 @@ def get_tangent_vector(region):
     reg_idx = []
     region = find_continuities()
 
+    if not region:
+        return 0, 0
+
     if isinstance(region, tuple):
         region = [region]
     for lims in region:
         lim_inf, lim_sup = lims
-        idxs = np.unique(np.linspace(lim_inf, lim_sup, -(-3*(lim_sup - lim_inf) // 4) + 1, dtype=int))
+        #idxs = np.unique(np.linspace(lim_inf, lim_sup, -(-3*(lim_sup - lim_inf) // 4) + 1, dtype=int))
+        idxs = np.unique(np.arange(lim_inf, lim_sup, 1, dtype=int))
         reg_idx = np.r_[np.array(reg_idx), idxs]
 
     oi_mat = get_oi_coord(reg_idx)
@@ -549,19 +555,21 @@ def run():
     print('next point:', x_next, y_next)
     print('curr left corner:', curr_C.left_corner,'right corner:', curr_C.right_corner)
     print('curr left corner[m]:', pixels2meters(curr_C.left_corner),'right corner[m]:', pixels2meters(curr_C.right_corner))
-    cover_dir = deque(['d', 'r', 'u', 'r'])
+    cover_dir = deque(['r', 'u', 'r', 'd'])
     bound_f = ''
     temp = ''
+    testvar = 0
     l, r = 0, 0
     passed_by = np.array([[]])
     point_from = np.array([pos.x, pos.y])
+    all_points = np.array([[]])
 
     while not rospy.is_shutdown():
         #print(x_next, y_next)
         left_corner = np.array(pixels2meters(curr_C.left_corner))
         right_corner = np.array(pixels2meters(curr_C.right_corner))
         cont_idx = find_continuities()
-        blocking, _ = check_blocking_oi(cont_idx, x_next, y_next)
+        blocking, reg_num = check_blocking_oi(cont_idx, x_next, y_next)
         nonstat = check_nonstationary(point_from, passed_by)
 
         if not path:
@@ -579,7 +587,7 @@ def run():
                     change_state(1)
                     last_counter = counter
                 
-                cover_dir = deque(['d', 'r', 'u', 'r'])
+                cover_dir = deque(['r', 'u', 'r', 'd'])
                 x_next, y_next = pixels2meters(curr_C.left_corner)
                 point_from = np.array([pos.x, pos.y])
                 passed_by = np.array([[]])
@@ -610,6 +618,8 @@ def run():
             if np.linalg.norm(left_corner - [pos.x, pos.y]) <= 9*err  and nonstat:
                 change_state(3)
                 last_counter = counter
+                testvar = 1
+                x_next, y_next = np.minimum(pos.x, right_corner[0]), -height / 2
                 point_from = np.array([pos.x, pos.y])
                 passed_by = np.array([[]])
                 bound_f = ''
@@ -631,8 +641,87 @@ def run():
                 v, w = boundary_following()
                 bound_f = ''
 
+        elif state % 3 == 0:
+            global last_motion_ang
+            last_motion_ang = -np.pi/2
+            goal = np.array([x_next, y_next])
+            cmap = {'d': (6, -1), 'u': (9, 1)}
+            print('pos', [pos.x, pos.y], 'goal', goal)
+            #input('s')
+            if np.linalg.norm(right_corner - [pos.x, pos.y]) <= 20*err  and nonstat:
+                curr_C = path.pop()
+                print('curr left corner:', curr_C.left_corner,'right corner:', curr_C.right_corner)
+                print('curr left corner[m]:', pixels2meters(curr_C.left_corner),'right corner[m]:', pixels2meters(curr_C.right_corner))
+
+                if curr_C in visited:
+                    change_state(0)
+                    last_counter = counter
+                else:
+                    visited.add(curr_C)
+                    change_state(1)
+                    last_counter = counter
+                print('next cell:', curr_C.val)
+                cover_dir = deque(['r', 'u', 'r', 'd'])
+                x_next, y_next = pixels2meters(curr_C.left_corner)
+                point_from = np.array([pos.x, pos.y])
+                passed_by = np.array([[]])
+                print('next point:', x_next, y_next)
+                testvar = 0
+
+            if state == 3:
+                
+                if np.linalg.norm(x_next + 0.5 - pos.x) <= 0.1:
+                    print('down 0.5')
+                    #cover_dir.rotate()
+                    change_state(6)
+                    x_next, y_next = np.minimum(pos.x, right_corner[0]), height/2
+                    v, w = motion2goal(x_next, y_next)
+                elif blocking:
+                    print('block')
+                    region = find_continuities()
+                    tangent, closest_point = get_tangent_vector(region)
+                    normal = np.array([pos.x, pos.y]) - closest_point
+                    print('tangent', tangent, 'normal', normal)
+                    vec = normal + tangent
+                    v, w = traj_controller(vec[0], vec[1])
+                    #v, w = traj_controller(np.minimum(vec[0], right_corner[0]), vec[1])
+                    #y_next = vec[1]
+                else:
+                    v, w = motion2goal(x_next, y_next)
+
+            elif state == 6:
+                if np.linalg.norm(x_next + 0.5 -pos.x) <= 0.1:
+                    print('up 0.5')
+                    #cover_dir.rotate()
+                    change_state(3)
+                    x_next, y_next =  np.minimum(pos.x, right_corner[0]), -height/2
+                    v, w = motion2goal(x_next, y_next)
+                elif blocking:
+                    print('up block')
+                    region = find_continuities()
+                    tangent, closest_point = get_tangent_vector(region)
+                    normal = np.array([pos.x, pos.y]) - closest_point
+                    print('tangent', tangent, 'normal', normal)
+                    vec = normal + tangent
+                    v, w = traj_controller(vec[0], vec[1])
+                    #vec = np.array([pos.x, pos.y]) + tangent
+                    #v, w = traj_controller(np.minimum(vec[0], right_corner[0]), vec[1])
+                else: 
+                    v, w = motion2goal(x_next, y_next)
+
+            elif state == 9:
+                if np.linalg.norm(goal - [pos.x, pos.y]) <= 10*err or blocking:
+                    cover_dir.rotate()
+                    change_state(3)
+                    x_next, y_next = pos.x + 0.5, pos.y
+            
+
         elif state == 3:
             goal = np.array([x_next, y_next])
+            print('\ngoal:', goal, 'state', cover_dir[0])
+            print('norm', np.linalg.norm(goal - [pos.x, pos.y]))
+            print('bloking', blocking)
+            input(f'position:{[pos.x, pos.y]}')
             
             #if right_corner[0] - pos.x < 0.1:
             #    cover_dir = deque(['u', 'r', 'd', 'r'])
@@ -640,13 +729,12 @@ def run():
             #if left_corner[0] - pos.x > 0.1:
             #    cover_dir = deque(['d', 'r', 'u', 'r'])
             #    l = 1
-            if blocking:
-                print('bbb', end='')
+            
+            if np.linalg.norm(goal - [pos.x, pos.y]) <= 10*err:
+                print('reached')
                 cover_dir.rotate(-1)
+                testvar = 0
                 temp = ''
-            elif np.linalg.norm(goal - [pos.x, pos.y]) <= 20*err  and nonstat:
-                 cover_dir.rotate(-1)
-                 temp = ''
 
             if np.linalg.norm(right_corner - [pos.x, pos.y]) <= 20*err  and nonstat:
                 curr_C = path.pop()
@@ -661,26 +749,27 @@ def run():
                     change_state(1)
                     last_counter = counter
                 print('next cell:', curr_C.val)
-                cover_dir = deque(['d', 'r', 'u', 'r'])
+                cover_dir = deque(['r', 'u', 'r', 'd'])
                 x_next, y_next = pixels2meters(curr_C.left_corner)
                 point_from = np.array([pos.x, pos.y])
                 passed_by = np.array([[]])
                 print('next point:', x_next, y_next)
-                
+                testvar = 0
+
             elif cover_dir[0] == 'd':
                 #print('d')
                 if temp != 'd':
                     #x_next, y_next = pos.x + 0.2 * l, -height / 2
-                    x_next, y_next = np.minimum(pos.x, right_corner[0] - 0.2), -height / 2
+                    x_next, y_next = np.minimum(pos.x, right_corner[0]), -height / 2
                     temp = 'd'
                 else:
                     temp = 'd'
             elif cover_dir[0] == 'r':
                 #print('r')
                 if temp != 'r':
-                    x_next, y_next = np.minimum(pos.x + 0.4, right_corner[0] - 0.2), pos.y
-                    print('position', pos.x + 0.4)
-                    print('corner limited', right_corner[0] - 0.2)
+                    x_next, y_next = np.minimum(pos.x + 0.5, right_corner[0]), pos.y
+                    print('position', pos.x + 0.5)
+                    print('corner limited', right_corner[0])
                 temp = 'r'
                 #else:
                 #    temp = 'r'
@@ -688,7 +777,7 @@ def run():
                 #print('u')
                 if temp != 'u':
                     #x_next, y_next = pos.x - 0.2 * r, height / 2
-                    x_next, y_next = np.minimum(pos.x, right_corner[0] - 0.2), height / 2
+                    x_next, y_next = np.minimum(pos.x, right_corner[0]), height / 2
                     temp = 'u'
                 else:
                     temp = 'u'
@@ -699,12 +788,45 @@ def run():
             if not counter % 151:
                 print('at', (pos.x, pos.y), '  to', (x_next, y_next))
                 print('temp', temp, 'stat', nonstat)
-        
+            
+            
+            cont_idx = find_continuities()
+            blocking, reg_num = check_blocking_oi(cont_idx, x_next, y_next)
+
+            if blocking:
+                print('block')
+                lim_infp, lim_supp = cont_idx[reg_num]
+                idxs = np.unique(np.arange(lim_infp, lim_supp, 1, dtype=int))
+                #oi_mat = get_oi_coord(list(region))
+                oi_mat = get_oi_coord(idxs)
+                pos_vec = np.array([pos.x, pos.y])
+                norm_mat = np.linalg.norm(pos_vec - oi_mat, axis=1)
+                oi_inf_dist = np.min(norm_mat)
+                tangent, closest_point = get_tangent_vector(cont_idx)
+                if temp=='r':
+                    vxvy = [x_next, y_next] - pos_vec + tangent
+                    vxvy = np.minimum(vxvy, [x_next, height / 2])
+                    v, w = traj_controller(vxvy[0], vxvy[1])
+                elif oi_inf_dist <= 0.5: 
+                    cover_dir.rotate()
+                    x_next, y_next = np.minimum(pos.x + 0.5, right_corner[0]), pos.y
+                    temp = ''
+                    
+                    """ if oi_inf_dist <= 0.5:
+                        print('bbb', end='')
+                        cover_dir.rotate(-1)
+                        testvar = 0
+                        temp = '' """
         if passed_by.size !=0:
             passed_by = np.r_[passed_by, [[pos.x, pos.y]]]
         else:
             passed_by = np.array([[pos.x, pos.y]])
-
+        if all_points.size !=0:
+            all_points = np.r_[all_points, [[pos.x, pos.y]]]
+        else:
+            all_points = np.array([[pos.x, pos.y]])
+        df = pd.DataFrame(all_points)
+        df.to_csv('/home/fbartelt/Documents/UFMG/Planejamento/logs/coverage.csv')
         twist.linear.x = v
         twist.angular.z = w
         pub.publish(twist)
