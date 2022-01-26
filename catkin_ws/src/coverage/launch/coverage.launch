@@ -1,5 +1,5 @@
 <launch>
-    <node name="Stage" pkg="stage_ros" type="stageros" args="$(find coverage)/worlds/trapz.world">
+    <node name="Stage" pkg="stage_ros" type="stageros" args="$(find coverage)/worlds/trapz2.world">
     </node>
 
     <node pkg="coverage" type="coverage.py" name="coverage" output="screen"/>
