@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from black import diff
 from cairo import Region
+from sympy import hessian
+from torch import hinge_embedding_loss
 import rospy
 import tf2_ros as tf2
 #import tf_conversions
@@ -20,7 +22,7 @@ err = 0.15 #Position tolerance in meters
 wstar = 0.8 #Safety distance W*
 Kp = 1 #Controller proportional gain
 d = 0.1 #For feedback linearization
-Vmax = 100 #Max velocity for the robot
+Vmax = 1000 #Max velocity for the robot
 zeta = 5
 d_star = 3
 eta = 10
@@ -211,7 +213,7 @@ def obstacle_tangent_normal(region):
     oi_mat = get_oi_coord(reg_idx)
     df = pd.DataFrame(oi_mat)
     df.to_csv('/home/fbartelt/Documents/UFMG/Planejamento/logs/GVD.csv')
-    print('SAVED')
+    #print('SAVED')
     pos_vec = np.array([pos.x, pos.y])
     norm_mat = np.linalg.norm(pos_vec - oi_mat, axis=1) ** 2
     min_idx = np.argmin(norm_mat)
@@ -475,6 +477,32 @@ def get_oi_config(ranges_idx_list):
 
     return qoi_mat
 
+def repulsive_like(q):
+    """
+    Params
+    ------
+    q: np.array
+        The robot's current configuration
+
+    Returns
+    -------
+    """
+    regions = find_continuities()
+    hessian = np.array([[0.0, 0.0], [0.0, 0.0]])
+    D = []
+
+    for obstacle in regions:
+        tangent, normal = obstacle_tangent_normal(obstacle)
+        distance = np.linalg.norm(normal)
+        #print('obs', obstacle, 'normal', normal, 'distance', distance)
+        D.append(distance)
+        #print('d', D)
+    D = np.array(D)
+    aux = D[:, None] - D
+    diff_D = aux[np.triu_indices(aux.shape[0], k=1)]
+    
+    return D
+
 def repulsive_potential(q):
     """Implements a repulsive potential as a sum of every repulsive
     potential given by each obstacle in sight. If the robot is more
@@ -496,6 +524,8 @@ def repulsive_potential(q):
     U_rep = 0
     grad_Urep = np.array([0.0, 0.0])
     regions = find_continuities()
+    hessian = np.array([[0.0, 0.0], [0.0, 0.0]])
+    grad_list = []
 
     for obstacle in regions:
         obs_inf, obs_sub = obstacle
@@ -506,16 +536,40 @@ def repulsive_potential(q):
         d_qqobs = d_c[idx_minc] - 0.4
         c = qoi_mat[idx_minc, :]
         grad_d = (q - c) / d_qqobs
+        den = (((q[1] - c[1])**2 + (q[0] - c[0])**2) ** (3/2))
+        dxx = ((q[1] - c[1])**2) / den
+        dxy = -((q[1] - c[1]) * (q[0] - c[0])) / den
+        dyy = ((q[0] - c[0])**2) / den
         
         #if d_qqobs <= Q_star:
-        eta = 50
+        #eta = 50
         if True:
             U_rep += 0.5 * eta * (1 / d_qqobs - 0 * (1 / Q_star))**2
-            grad_Urep += eta * ((1 / Q_star)*0 - 1 / d_qqobs) * (1 / (d_qqobs ** 2)) * grad_d
+            grad_Ui = eta * ((1 / Q_star)*0 - 1 / d_qqobs) * (1 / (d_qqobs ** 2)) * grad_d
+            grad_list.append(grad_Ui)
+            grad_Urep += grad_Ui
+            hessian += np.array([[dxx, dxy], [dxy, dyy]])
         else:
             U_rep += 0
             grad_Urep += 0 
-    return U_rep, grad_Urep
+    return U_rep, grad_Urep, np.array(grad_list)
+
+def check_repulsive(repulsive_list):
+    """ Returns number of repulsive potentials that cancel another.
+    Without repetition.
+    """
+    U_list = repulsive_list.copy()
+    
+    if isinstance(U_list, list):
+        U_list = np.array(U_list)
+
+    diff_U = U_list + U_list[:, None]
+    diff_U_norm = np.linalg.norm(diff_U, axis=2)
+    norms = diff_U_norm[np.triu_indices(diff_U_norm.shape[0], 1)] # norm between Ui and Uj, i!=j
+    equidistant_to = np.sum(norms <= 0.6)
+    print('NORMS', norms)
+
+    return equidistant_to
 
 def set_tan_ang(tangent):
     global last_motion_ang
@@ -551,11 +605,31 @@ def run():
     w = 0
     ref = 0
     rate.sleep()
+    tangent = np.array([0.0, 0.0])
 
     while not rospy.is_shutdown():
         regions = find_continuities()
+        print(regions)
         q = np.array([pos.x, pos.y])
-        _, grad_Urep = repulsive_potential(q)
+        _, grad_Urep, grad_list = repulsive_potential(q)
+        diff_D = repulsive_like(q)
+        equi2 = check_repulsive(grad_list)
+        kkk = 1
+        #print(f'Diff D {diff_D}')
+        for i, d in enumerate(diff_D[:-1]):
+            if any(np.abs(d - diff_D[i+1::]) <= 5e-2):
+                kkk += 1
+        print(diff_D)
+        print(kkk)
+        print(f'gradlist: {grad_list}')
+        print(f'Cancelling potentials =  {equi2}')
+        #input(f'norma: {np.linalg.norm(grad_list, axis=1)}')
+        #if kkk >= 3:
+        #    print(diff_D)
+        #    input(f'kkk 3 maior: {kkk}')
+        #    change_state(1)
+        #    tangent, normal = obstacle_tangent_normal(regions)
+
         U_grad = - grad_Urep
         if np.linalg.norm(U_grad) <= 0.6 or state == 1:
             gvd.add_edge((round(pos.x, 1), round(pos.y, 1)))
@@ -563,15 +637,18 @@ def run():
             change_state(1)
             tangent, normal = obstacle_tangent_normal(regions)
             set_tan_ang(tangent)
-            print('tangent', tangent, np.linalg.norm(tangent))
+            #print('tangent', tangent, np.linalg.norm(tangent))
             U_grad = tangent - grad_Urep
-            input('going tangent ')
+            #input('going tangent ')
         elif state == 1:
             if np.linalg.norm(U_grad) > 0.6:
                 change_state(0)
             else:
                 U_grad = tangent
-        print('repulsive', U_grad, np.linalg.norm(U_grad))
+        #print('repulsive', U_grad, np.linalg.norm(U_grad))
+        #print('hessian', hessian)
+        #print('eig', np.linalg.eig(hessian))
+        #input('INPUT')
         v, w = traj_controller2(U_grad[0], U_grad[1])
         twist.linear.x = v
         twist.angular.z = w
