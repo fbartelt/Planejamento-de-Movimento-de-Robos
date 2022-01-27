@@ -117,6 +117,16 @@ def find_continuities():
     lim_inf = np.array([x for i, x in enumerate(cont_indx) 
                         if (x - 1 != cont_indx[(i - 1) % len(cont_indx)])])
     cont_lims = [x for x in zip(lim_inf, lim_sup) if x[0] != x[1]]
+    lims_ = list(zip(*cont_lims))
+    rep = [x for x in lims_[0] if any((x - 10 <= np.array(lims_[1])) & (np.array(lims_[1]) <= x + 10))]
+    rep2 = [x for x in lims_[1] if any((x - 10 <= np.array(rep)) & (np.array(rep) <= x + 10))]
+    lim_inf, lim_sup = np.array(lims_[0]), np.array(lims_[1])
+    new_inf = [x for x in lim_inf if x not in rep]
+    new_sup = [x for x in lim_sup if x not in rep2]
+    new_lims = list(zip(new_inf, new_sup))
+    print('contlims:', cont_lims)
+    print('new lims:', new_lims)
+    input('s')
     
     return cont_lims
     
