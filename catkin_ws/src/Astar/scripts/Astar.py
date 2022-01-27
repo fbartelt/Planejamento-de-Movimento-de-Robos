@@ -8,7 +8,6 @@ from tf.transformations import euler_from_quaternion
 import math
 import numpy as np
 import os
-import pandas as pd
 import time
 
 #User defined
@@ -20,6 +19,7 @@ Vmax = 1000 #Max velocity for the robot
 height, width = (16, 16) # in meters
 scale = 28 # meters / pixel
 robot_pos0 = (-6, 2) # initial position
+#robot_pos0 = (-1.46, 2.25) # initial position
 
 pos = gmsg.Point()
 pos.x = robot_pos0[0]
@@ -169,8 +169,6 @@ class A_star:
                 self.O.sort(key=lambda x : x.f, reverse=True)
                 
         self._gen_path(ncurr)
-        df = pd.DataFrame(self.path)
-        df.to_csv('/home/fbartelt/Documents/UFMG/Planejamento/logs/astar_path.csv')
         change_state(1)
 
 def run(x_goal, y_goal, neighbors=4):
@@ -189,7 +187,7 @@ def run(x_goal, y_goal, neighbors=4):
     xgoalp, ygoalp = meters2pixels((x_goal, y_goal))
     x0p, y0p = meters2pixels(robot_pos0)
     planner = A_star(grid, (y0p, x0p), (ygoalp, xgoalp))
-    print((x0p, y0p), (xgoalp, ygoalp))
+    #print((x0p, y0p), (xgoalp, ygoalp))
     change_state(0)
     sttime = time.time()
     planner.run()
