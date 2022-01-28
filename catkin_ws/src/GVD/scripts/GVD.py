@@ -93,6 +93,158 @@ def range2cart(ranges, idx):
     
     return range_world[:2]
 
+def _check_unitable(intervals, tol=20):
+    """Auxiliary function for approx_interval_union(). It is just a
+    copy of the first lines of the function.
+    """
+    interval = intervals.copy()
+    lims_ = list(map(np.array, zip(*interval)))
+    idx = np.indices(lims_[0].shape).ravel()
+    idx2 = np.indices(lims_[1].shape).ravel()
+    rep = [(i, np.where(((x - tol <= lims_[1][idx]) & (lims_[1][idx] <= x + tol))  & (idx > i))) 
+            for i, x in enumerate(lims_[0])]
+    rep2 = [(i, np.where(((x - tol <= lims_[0][idx2]) & (lims_[0][idx2] <= x + tol))& (idx > i))) 
+            for i, x in enumerate(lims_[1])]
+    rep = [(k, l[0].ravel()) for k, l in rep if l[0].size != 0]
+    rep2 = [(k, l[0].ravel()) for k, l in rep2 if l[0].size != 0]
+    return rep, rep2
+
+def interval_union(intervals, verbose=False):
+    """ Returns the union of discrete intervals that share an inter-
+    section. E.g.
+    [(0, 100), (90, 200), (240, 300)] -> [(0, 200), (240, 300)]
+
+    Parameters
+    ----------
+    intervals: list
+        A list of intervals as returned by <find_continuities()>
+
+    Returns:
+    --------
+    new_lims: list
+        The union of the intervals that share an intersection.
+    """
+    aa = intervals.copy()
+    aa_ = np.array(aa)
+    idxs = np.array(range(aa_.size)).reshape(aa_.shape)
+    lll = [np.where(((inf <= aa_) & (aa_ <= sup)) & (idxs//2 != i)) for i, (inf, sup) in enumerate(aa_)]
+    ttt = [(i, x[0]) for i, x in enumerate(lll) if x[0].size!=0 and x[1].size!=0]
+    new_lims = set(aa)
+    new_idx = {}
+
+    for k in ttt:
+        i, (idx, *_) = k
+        temp1, temp2 = aa_[i], aa_[idx]
+        
+        if tuple(temp1) in new_idx.keys():
+            temp1 = new_idx[tuple(temp1)]
+        if tuple(temp2) in new_idx.keys():
+            temp2 = new_idx[tuple(temp2)]
+
+        inf, sup = temp1
+        inf2, sup2 = temp2
+
+        if inf2 < inf:
+            inf = inf2
+        if sup2 > sup:
+            sup = sup2
+        
+        new_idx[tuple(temp1)] = (inf, sup)
+        new_idx[tuple(temp2)] = (inf, sup)
+        new_lims.discard(tuple(temp1))
+        new_lims.discard(tuple(temp2))
+        new_lims.add((inf, sup))
+        
+        if verbose:
+            print(i, idx)
+            print(aa_[i], aa_[idx])
+            print(inf, sup)
+            print(new_idx)
+    new_lims = list(new_lims)
+    new_lims.sort(key=lambda x: x[0])
+    if verbose:
+        print(new_lims)
+    
+    return new_lims
+
+def approx_interval_union(intervals, tol=20, verbose=False, counter=0):
+    """ Returns the union of discrete intervals that share an inter-
+    section given a tolerance tol. E.g.
+    [(0, 100), (110, 200), (240, 300)] -> [(0, 200), (240, 300)]
+
+    Parameters
+    ----------
+    intervals: list
+        A list of intervals as returned by <find_continuities()>
+    tol: int
+        The tolerance for considering two boundary limits as the same.
+        E.g. 90 == 100 == 110
+
+    Returns:
+    --------
+    new_lims: list
+        The union of the intervals that share an intersection.
+    """
+    interval = intervals.copy()
+    lims_ = list(map(np.array, zip(*interval)))
+    idx = np.indices(lims_[0].shape).ravel()
+    idx2 = np.indices(lims_[1].shape).ravel()
+    rep = [(i, np.where(((x - tol <= lims_[1][idx]) & (lims_[1][idx] <= x + tol))  & (idx > i))) 
+            for i, x in enumerate(lims_[0])]
+    rep2 = [(i, np.where(((x - tol <= lims_[0][idx2]) & (lims_[0][idx2] <= x + tol))& (idx > i))) 
+            for i, x in enumerate(lims_[1])]
+    rep = [(k, l[0].ravel()) for k, l in rep if l[0].size != 0]
+    rep2 = [(k, l[0].ravel()) for k, l in rep2 if l[0].size != 0]
+    new_lims = set(interval)
+    new_idx1 = {}
+    new_idx2 = {}
+    
+    for i, p in enumerate([rep, rep2]):
+        if verbose:
+            print('EM', i)
+        for r in p:
+            k, l = r
+            curr = interval[k]
+            if verbose:
+                print('curr: ', curr)
+            for idx in l:
+                remove = interval[idx]
+                if verbose:
+                    print('remove: ', remove)
+                if i ==0:
+                    if interval[idx] in new_idx2.keys():
+                        remove = new_idx2[interval[idx]]
+                    new_lims.discard(remove)
+                    new_lims.discard(curr)
+                    newl = (curr[0], remove[1])
+                    new_lims.add(newl)
+                    new_idx1[curr] = newl
+                    new_idx2[remove] = newl
+                else:
+                    if interval[idx] in new_idx1.keys():
+                        remove = new_idx1[interval[idx]]
+                    newl = (curr[0], remove[1])
+                    new_lims.discard(remove)
+                    new_lims.discard(curr)
+                    new_lims.add(newl)
+                    new_idx2[curr] = newl
+                    new_idx1[remove] = newl
+                if verbose:
+                    print(newl)
+                    print(new_idx1, new_idx2)
+    
+    new_lims = list(new_lims)
+    new_lims.sort(key=lambda x: x[0])
+    t1, t2 = _check_unitable(new_lims, tol=tol)
+    
+    if (len(t1) > 0 or len(t2) > 0) and counter < 998:
+        if verbose:
+            print(new_lims)
+        new_lims = approx_interval_union(new_lims, verbose, counter=counter+1)
+    new_lims = interval_union(new_lims)
+
+    return  new_lims
+
 def find_continuities():
     """ Returns a list of continuities intervals (min, max) for each
     detected obstacle, i.e. the closed intervals of <ranges> indices
@@ -117,19 +269,46 @@ def find_continuities():
     lim_inf = np.array([x for i, x in enumerate(cont_indx) 
                         if (x - 1 != cont_indx[(i - 1) % len(cont_indx)])])
     cont_lims = [x for x in zip(lim_inf, lim_sup) if x[0] != x[1]]
-    lims_ = list(zip(*cont_lims))
-    rep = [x for x in lims_[0] if any((x - 10 <= np.array(lims_[1])) & (np.array(lims_[1]) <= x + 10))]
-    rep2 = [x for x in lims_[1] if any((x - 10 <= np.array(rep)) & (np.array(rep) <= x + 10))]
-    lim_inf, lim_sup = np.array(lims_[0]), np.array(lims_[1])
-    new_inf = [x for x in lim_inf if x not in rep]
-    new_sup = [x for x in lim_sup if x not in rep2]
-    new_lims = list(zip(new_inf, new_sup))
-    print('contlims:', cont_lims)
-    print('new lims:', new_lims)
-    input('s')
+    #lims_ = list(zip(*cont_lims))
+    #rep = [x for x in lims_[0] if any((x - 10 <= np.array(lims_[1])) & (np.array(lims_[1]) <= x + 10))]
+    #rep2 = [x for x in lims_[1] if any((x - 10 <= np.array(rep)) & (np.array(rep) <= x + 10))]
+    #lim_inf, lim_sup = np.array(lims_[0]), np.array(lims_[1])
+    #new_inf = [x for x in lim_inf if x not in rep]
+    #new_sup = [x for x in lim_sup if x not in rep2]
+    #new_lims = list(zip(new_inf, new_sup))
+    #print('contlims:', cont_lims)
+    new_lims = approx_interval_union(cont_lims)
+    print('\nnew lims:', new_lims)
+    #input('DEBUG')
+    #if len(cont_lims) > len(new_lims):
+    #    print('***'*30)
+    #    print('\ncontlims:', cont_lims)
+    #    print('\nnew lims:', new_lims)
+    #    print('***'*30)
+    #    input('\nDEBUG')
+    #input('s')
     
-    return cont_lims
+    return new_lims
+
+def count_obstacles(intervals):
+    """Counts the number of obstacles in sight
+
+    Parameters
+    ----------
+    intervals: list
+        A list of intervals as returned by <find_continuities()>
     
+    Returns
+    -------
+    obstacle_num: int
+        The number of obstacles
+    """
+    obstacle_num = len(intervals)
+    if intervals[0][0] == 0 and intervals[-1][1] == 1439: # 1440 sensors
+        obstacle_num -= 1
+    return obstacle_num
+
+
 def check_blocking_oi(cont_idx, x_goal, y_goal):
     #TODO check if robot will collide even when goal is visible
     """Checks if any Oi is blocking the path to goal by angle 
@@ -562,7 +741,7 @@ def repulsive_potential(q):
         else:
             U_rep += 0
             grad_Urep += 0 
-    return U_rep, grad_Urep, np.array(grad_list)
+    return U_rep, grad_Urep, np.array(grad_list), hessian
 
 def check_repulsive(repulsive_list):
     """ Returns number of repulsive potentials that cancel another.
@@ -615,46 +794,77 @@ def run():
     w = 0
     ref = 0
     rate.sleep()
-    tangent = np.array([0.0, 0.0])
+    tangent = np.array([10.0, 0.0])
+    rot90 = np.array([
+            [np.cos(np.pi/2), -np.sin(np.pi/2)],
+            [np.sin(np.pi/2), np.cos(np.pi/2)]
+        ])
 
     while not rospy.is_shutdown():
         regions = find_continuities()
         print(regions)
         q = np.array([pos.x, pos.y])
-        _, grad_Urep, grad_list = repulsive_potential(q)
-        diff_D = repulsive_like(q)
-        equi2 = check_repulsive(grad_list)
-        kkk = 1
-        #print(f'Diff D {diff_D}')
-        for i, d in enumerate(diff_D[:-1]):
-            if any(np.abs(d - diff_D[i+1::]) <= 5e-2):
-                kkk += 1
-        print(diff_D)
-        print(kkk)
-        print(f'gradlist: {grad_list}')
-        print(f'Cancelling potentials =  {equi2}')
-        #input(f'norma: {np.linalg.norm(grad_list, axis=1)}')
-        #if kkk >= 3:
-        #    print(diff_D)
-        #    input(f'kkk 3 maior: {kkk}')
-        #    change_state(1)
-        #    tangent, normal = obstacle_tangent_normal(regions)
+        
+        if regions:
+            obstacle_num = count_obstacles(regions)
+            _, grad_Urep, grad_list, hessian = repulsive_potential(q)
+            diff_D = repulsive_like(q)
+            equi2 = check_repulsive(grad_list)
+            kkk = 1
+            #print(f'Diff D {diff_D}')
+            for i, d in enumerate(diff_D[:-1]):
+                if any(np.abs(d - diff_D[i+1::]) <= 5e-2):
+                    kkk += 1
+            #input(f'norma: {np.linalg.norm(grad_list, axis=1)}')
+            #if kkk >= 3:
+            #    print(diff_D)
+            #    input(f'kkk 3 maior: {kkk}')
+            #    change_state(1)
+            #    tangent, normal = obstacle_tangent_normal(regions)
 
-        U_grad = - grad_Urep
-        if np.linalg.norm(U_grad) <= 0.6 or state == 1:
-            gvd.add_edge((round(pos.x, 1), round(pos.y, 1)))
-        if state == 0 and np.linalg.norm(U_grad) <= 0.1:
-            change_state(1)
-            tangent, normal = obstacle_tangent_normal(regions)
-            set_tan_ang(tangent)
-            #print('tangent', tangent, np.linalg.norm(tangent))
-            U_grad = tangent - grad_Urep
-            #input('going tangent ')
-        elif state == 1:
-            if np.linalg.norm(U_grad) > 0.6:
-                change_state(0)
-            else:
-                U_grad = tangent
+            U_grad = - grad_Urep
+            if np.linalg.norm(U_grad) <= 0.4 or (state == 1 and obstacle_num > 1):
+                gvd.add_edge((round(pos.x, 1), round(pos.y, 1)))
+            if state == 0 and np.linalg.norm(U_grad) <= 0.2:
+                if obstacle_num >= 3:
+                    change_state(2)
+                    vec = np.linalg.eig(hessian)[1][:, 0]
+                    U_grad = 5* (rot90 @ vec.reshape(-1, 1)).ravel()
+                else:
+                    change_state(1)
+                    tangent, normal = obstacle_tangent_normal(regions)
+                    set_tan_ang(tangent)
+                    #print('tangent', tangent, np.linalg.norm(tangent))
+                    U_grad = tangent - grad_Urep
+                    #input('going tangent ')
+            elif state == 1:
+                if np.linalg.norm(U_grad) > 0.2:
+                    change_state(0)
+                else:
+                    U_grad = tangent
+            
+            elif state == 2:
+                if obstacle_num < 3:
+                    change_state(0)
+                vec = np.linalg.eig(hessian)[1][:, 0]
+                U_grad = 5* (rot90 @ vec.reshape(-1, 1)).ravel()
+                
+            
+            if obstacle_num >= 3:
+                #print(f'diff D: {diff_D}')
+                #print(f'kkk: {kkk}')
+                print(f'gradlist: {grad_list}')
+                print(f'Cancelling potentials =  {equi2}')
+                print(f'H: {hessian}')
+                print(f'eig: {np.linalg.eig(hessian)}')
+                print(f'test: {np.linalg.eig(hessian)[1][:, 0]}')
+                print(f'state: {state}')
+                print(f'Ugrad: {U_grad}')
+                print(regions)
+                input(f'3+ OBSTACLES: {obstacle_num}')
+
+        else:
+            U_grad = tangent
         #print('repulsive', U_grad, np.linalg.norm(U_grad))
         #print('hessian', hessian)
         #print('eig', np.linalg.eig(hessian))
@@ -666,8 +876,8 @@ def run():
         if counter != 0 and counter % 100 == 0:
             with open('/home/fbartelt/Documents/UFMG/Planejamento/logs/GVD.pickle', 'wb') as handle:
                 pickle.dump(gvd, handle, protocol=pickle.HIGHEST_PROTOCOL)
-                print('\n'*4+'PICKLEEEEEEEEEEEEEEEE'+'\n'*2)
-            input('pickled')
+                #print('\n'*4+'PICKLEEEEEEEEEEEEEEEE'+'\n'*2)
+            #input('pickled')
 
         """ if ranges_ and state == 0:
             min_dist_idx = np.argmin(ranges_)
