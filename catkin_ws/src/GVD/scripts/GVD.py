@@ -1,8 +1,5 @@
 #!/usr/bin/env python
-from black import diff
-from cairo import Region
-from sympy import hessian
-from torch import hinge_embedding_loss
+from collections import deque
 import rospy
 import tf2_ros as tf2
 #import tf_conversions
@@ -11,6 +8,7 @@ import geometry_msgs.msg as gmsg
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
+from functools import reduce
 import math
 import pandas as pd
 import pickle
@@ -46,7 +44,7 @@ state = 0
 d_rob2goal = 0
 d_reach = 0
 d_followed = 0
-states = {0 : 'Ch', 1 : 'Check Obstacle', 2 : 'Find equidistance', 
+states = {0 : 'Find Equidistant point', 1 : 'Walk on GVD', 2 : 'Meet point', 
           3 : 'Walk GVD', 4: 'dasda'}
 tan_list = []
 last_motion_vec = np.array([1e-7, 1e-7])
@@ -679,18 +677,31 @@ def repulsive_like(q):
     regions = find_continuities()
     hessian = np.array([[0.0, 0.0], [0.0, 0.0]])
     D = []
+    ignore = False
 
+    if regions[0][0] == 0 and regions[-1][1] == 1439:
+        temp1 = regions[0]
+        temp2 = regions[-1]
+        if (temp1[1] - temp1[0] <= 10) or (temp2[1] - temp2[0] <= 10):
+            ignore = regions[0]
+            
+            if ignore[1] - ignore[0] < temp2[1] - temp2[0]:
+                ignore = temp2
+    
     for obstacle in regions:
-        tangent, normal = obstacle_tangent_normal(obstacle)
-        distance = np.linalg.norm(normal)
-        #print('obs', obstacle, 'normal', normal, 'distance', distance)
-        D.append(distance)
+        if obstacle != ignore:
+            tangent, normal = obstacle_tangent_normal(obstacle)
+            distance = np.linalg.norm(normal)
+            #print('obs', obstacle, 'normal', normal, 'distance', distance)
+            D.append(distance)
         #print('d', D)
     D = np.array(D)
+    idx = np.nonzero(np.triu(np.isclose(D[:, None], D, 1e-1), 1))
+    similars = list(zip(*idx))
     aux = D[:, None] - D
     diff_D = aux[np.triu_indices(aux.shape[0], k=1)]
     
-    return D
+    return D, similars
 
 def repulsive_potential(q):
     """Implements a repulsive potential as a sum of every repulsive
@@ -769,17 +780,30 @@ def set_tan_ang(tangent):
         last_motion_ang = np.pi/2
     else:
         last_motion_ang = -np.pi/2
+
+def discrete_grad(normal_list):
+    """vec1 = normal_list[0].copy()
+    vec0 = normal_list[1].copy()
+    dx = np.gradient(np.array([vec1[0], vec0[0]]))[0]
+    dy = np.gradient(np.array([vec1[1], vec0[1]]))[0]
+    grad = np.array([dx, dy])"""
+    grad = reduce(lambda x, y : x-y, normal_list)
+
+    return grad
 class GVD:
     def __init__(self):
         self.edges = set()
-        self.meet_points = set()
+        self.meet_points = {}
     
     def add_edge(self, coord):
-        if coord in self.edges:
-            self.edges.remove(coord)
-            self.meet_points.add(coord)
-        else:
-            self.edges.add(coord)
+        #coord_ = (round(coord[0], 1), round(coord[1], 1))
+        self.edges.add(coord)
+    
+    def add_meetpoint(self, coord, eigenv):
+        coord_ = (round(coord[0], 1), round(coord[1], 1))
+        self.meet_points[coord_] = eigenv
+
+
 
 def run():
     global pub, counter, d_rob2goal, d_reach, d_followed, bound_pos, path_folowd
@@ -793,6 +817,7 @@ def run():
     gvd = GVD()
     w = 0
     ref = 0
+    normal_queue = deque(np.array([0.0, 0.0]), maxlen=2)
     rate.sleep()
     tangent = np.array([10.0, 0.0])
     rot90 = np.array([
@@ -808,7 +833,7 @@ def run():
         if regions:
             obstacle_num = count_obstacles(regions)
             _, grad_Urep, grad_list, hessian = repulsive_potential(q)
-            diff_D = repulsive_like(q)
+            diff_D, similars = repulsive_like(q)
             equi2 = check_repulsive(grad_list)
             kkk = 1
             #print(f'Diff D {diff_D}')
@@ -821,35 +846,59 @@ def run():
             #    input(f'kkk 3 maior: {kkk}')
             #    change_state(1)
             #    tangent, normal = obstacle_tangent_normal(regions)
+            test1, test2 = obstacle_tangent_normal(regions)
+            normal_queue.appendleft(test2)
+            gradd = reduce(lambda x, y : x-y, normal_queue)
+            gradd = 2 * gradd / np.linalg.norm(gradd)
+            print('gradd', gradd)
 
-            U_grad = - grad_Urep
-            if np.linalg.norm(U_grad) <= 0.4 or (state == 1 and obstacle_num > 1):
-                gvd.add_edge((round(pos.x, 1), round(pos.y, 1)))
-            if state == 0 and np.linalg.norm(U_grad) <= 0.2:
+            U_grad = gradd
+            #if np.linalg.norm(U_grad) <= 0.4 or (state == 1 and obstacle_num > 1):
+            if len(similars) > 1 or state==1:
+                gvd.add_edge((pos.x, pos.y))
+            print('diss', diff_D)
+            print('normal', test2)
+            #if state == 0 and np.linalg.norm(U_grad) <= 0.1:
+            if state == 0 and len(similars)>0:
                 if obstacle_num >= 3:
-                    change_state(2)
-                    vec = np.linalg.eig(hessian)[1][:, 0]
-                    U_grad = 5* (rot90 @ vec.reshape(-1, 1)).ravel()
+                    pass
+            #        change_state(2)
+            #        input('changed state')
+            #        eigenv = np.linalg.eig(hessian)[1]
+            #        gvd.add_meetpoint((pos.x, pos.y), eigenv[:, 0])
+            #        gvd.add_meetpoint((pos.x, pos.y), eigenv[:, 1])
+            #        vec = -eigenv[:, 0]
+            #        U_grad = 5* (rot90 @ vec.reshape(-1, 1)).ravel()
                 else:
                     change_state(1)
-                    tangent, normal = obstacle_tangent_normal(regions)
+                    input('changed state')
+                    tangent = (rot90 @ gradd.reshape(-1, 1)).ravel()
                     set_tan_ang(tangent)
                     #print('tangent', tangent, np.linalg.norm(tangent))
-                    U_grad = tangent - grad_Urep
+                    U_grad = tangent
                     #input('going tangent ')
             elif state == 1:
-                if np.linalg.norm(U_grad) > 0.2:
+                if not similars:
                     change_state(0)
+                    input('changed state')
                 else:
                     U_grad = tangent
             
-            elif state == 2:
-                if obstacle_num < 3:
-                    change_state(0)
-                vec = np.linalg.eig(hessian)[1][:, 0]
-                U_grad = 5* (rot90 @ vec.reshape(-1, 1)).ravel()
-                
-            
+            #elif state == 2:
+            #    if obstacle_num < 3:
+            #        change_state(0)
+            #        input('changed state')
+            #    vec = -np.linalg.eig(hessian)[1][:, 0]
+            #    U_grad = 5* (rot90 @ vec.reshape(-1, 1)).ravel()
+            #    
+            if len(similars) > 0:
+                print('state', state)
+                print('regions', regions)
+                print('Distances', diff_D)
+                print('Similars idxs', similars)
+                print('gradd', gradd)
+                print('normal queu', normal_queue)
+                input('CANCELLING')
             if obstacle_num >= 3:
                 #print(f'diff D: {diff_D}')
                 #print(f'kkk: {kkk}')
@@ -860,8 +909,10 @@ def run():
                 print(f'test: {np.linalg.eig(hessian)[1][:, 0]}')
                 print(f'state: {state}')
                 print(f'Ugrad: {U_grad}')
+                print('gradd', gradd)
+                print('normal queu', normal_queue)
                 print(regions)
-                input(f'3+ OBSTACLES: {obstacle_num}')
+                #input(f'3+ OBSTACLES: {obstacle_num}')
 
         else:
             U_grad = tangent
