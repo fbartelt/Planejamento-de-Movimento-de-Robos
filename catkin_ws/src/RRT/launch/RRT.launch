@@ -1,0 +1,8 @@
+<launch>
+    <arg name="goal" default="5 2"/>
+    <node name="Stage" pkg="stage_ros" type="stageros" args="$(find RRT)/worlds/maze.world">
+    </node>
+
+    <node pkg="RRT" type="RRT.py" name="RRT" args="$(arg goal)" output="screen"/>
+
+</launch>
