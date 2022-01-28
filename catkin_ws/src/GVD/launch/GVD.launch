@@ -1,0 +1,7 @@
+<launch>
+    <node name="Stage" pkg="stage_ros" type="stageros" args="$(find GVD)/worlds/gvd.world">
+    </node>
+
+    <node pkg="GVD" type="GVD.py" name="GVD" output="screen"/>
+
+</launch>
