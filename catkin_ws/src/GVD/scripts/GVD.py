@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 from collections import deque
+
+from sympy import closest_points
 import rospy
 import tf2_ros as tf2
 #import tf_conversions
@@ -421,7 +423,7 @@ def obstacle_tangent_normal(region):
     tangent = (rot90 @ D.reshape(-1, 1)).ravel()
     closest_point = pos_vec - D
     
-    return tangent, D
+    return tangent, D, closest_point
 
 def choose_oi(ranges, cont_idx, x_goal, y_goal):
     """Returns the coordinates of best Oi to follow if the robot is in
@@ -677,23 +679,34 @@ def repulsive_like(q):
     regions = find_continuities()
     hessian = np.array([[0.0, 0.0], [0.0, 0.0]])
     D = []
+    closest_points = []
+    normals = []
     ignore = False
 
     if regions[0][0] == 0 and regions[-1][1] == 1439:
-        temp1 = regions[0]
-        temp2 = regions[-1]
-        if (temp1[1] - temp1[0] <= 10) or (temp2[1] - temp2[0] <= 10):
+        v1 = range2cart(ranges_, 0)
+        v2 = range2cart(ranges_, -1)
+        dvv = np.linalg.norm(v2 - v1)
+        print('v1 v2', v1, v2)
+        print('dvv', dvv)
+        #input('DDD')
+        if dvv <= 1e-1:
+            temp1 = regions[0]
+            temp2 = regions[-1]
+
+#            if (temp1[1] - temp1[0] <= 10) or (temp2[1] - temp2[0] <= 10):
             ignore = regions[0]
-            
+
             if ignore[1] - ignore[0] < temp2[1] - temp2[0]:
                 ignore = temp2
     
     for obstacle in regions:
         if obstacle != ignore:
-            tangent, normal = obstacle_tangent_normal(obstacle)
+            _, normal, closest_point = obstacle_tangent_normal(obstacle)
             distance = np.linalg.norm(normal)
-            #print('obs', obstacle, 'normal', normal, 'distance', distance)
+            normals.append(normal)
             D.append(distance)
+            closest_points.append(closest_point)
         #print('d', D)
     D = np.array(D)
     idx = np.nonzero(np.triu(np.isclose(D[:, None], D, 1e-1), 1))
@@ -701,7 +714,7 @@ def repulsive_like(q):
     aux = D[:, None] - D
     diff_D = aux[np.triu_indices(aux.shape[0], k=1)]
     
-    return D, similars
+    return D, similars, closest_points, normals
 
 def repulsive_potential(q):
     """Implements a repulsive potential as a sum of every repulsive
@@ -833,20 +846,20 @@ def run():
         if regions:
             obstacle_num = count_obstacles(regions)
             _, grad_Urep, grad_list, hessian = repulsive_potential(q)
-            diff_D, similars = repulsive_like(q)
+            D, similars, closest_points, normals = repulsive_like(q)
             equi2 = check_repulsive(grad_list)
             kkk = 1
-            #print(f'Diff D {diff_D}')
-            for i, d in enumerate(diff_D[:-1]):
-                if any(np.abs(d - diff_D[i+1::]) <= 5e-2):
+            #print(f'Diff D {D}')
+            for i, d in enumerate(D[:-1]):
+                if any(np.abs(d - D[i+1::]) <= 5e-2):
                     kkk += 1
             #input(f'norma: {np.linalg.norm(grad_list, axis=1)}')
             #if kkk >= 3:
-            #    print(diff_D)
+            #    print(D)
             #    input(f'kkk 3 maior: {kkk}')
             #    change_state(1)
             #    tangent, normal = obstacle_tangent_normal(regions)
-            test1, test2 = obstacle_tangent_normal(regions)
+            test1, test2,_ = obstacle_tangent_normal(regions)
             normal_queue.appendleft(test2)
             gradd = reduce(lambda x, y : x-y, normal_queue)
             gradd = 2 * gradd / np.linalg.norm(gradd)
@@ -854,14 +867,66 @@ def run():
 
             U_grad = gradd
             #if np.linalg.norm(U_grad) <= 0.4 or (state == 1 and obstacle_num > 1):
-            if len(similars) > 1 or state==1:
+            #if len(similars) > 1 or state==1:
+            #    gvd.add_edge((pos.x, pos.y))
+            
+            if len(similars) == 0: # not equidistant
+                #input('state0')
+                idx = np.argmin(D)
+                normal = normals[idx]
+                U_grad = 5 * normal / (np.linalg.norm(normal)+1e-5)
+                if state != 0:
+                    change_state(0)
+                    input('changed 0 ')
+            elif len(similars) == 1: # equidistant to 2 obstacles
                 gvd.add_edge((pos.x, pos.y))
-            print('diss', diff_D)
+                s1, s2 =  similars[0]
+                c1 = closest_points[s1]
+                c2 = closest_points[s2]
+                dist_oi2oi = c1 - c2
+                vec = (rot90 @ dist_oi2oi.reshape(-1, 1)).ravel()
+                U_grad = 5 * vec / (np.linalg.norm(vec) + 1e-5)
+                print('s1 s2', s1, s2)
+                print('c1 c2', c1, c2)
+                print('similars', similars)
+                print('closest', closest_points)
+                print('distoi2 ', dist_oi2oi)
+                input(f'debug state1 {vec}')
+                if state != 1:
+                    change_state(1)
+                    #input('changed 1 ')
+            elif len(similars) > 1 and state != 2: # equidistant to 3 or more obstacles
+                gvd.add_edge((pos.x, pos.y))
+                choices = np.arange(len(similars))
+                np.random.default_rng().shuffle(choices)
+                print('choices', choices)
+                print('choices[0]', choices[0])
+                print('similars[choices[0]]', similars[choices[0]],  similars[choices[0]][0])
+                print('normals', normals)
+                #input('DEBUG')
+                vec = normals[similars[choices[0]][0]]
+                vec = (rot90 @ dist_oi2oi.reshape(-1, 1)).ravel()
+                U_grad = 10 * vec / (np.linalg.norm(vec) + 1e-5)
+                ref = U_grad
+                if state != 2:
+                    change_state(2)
+                    #input('changed 2 ')
+            elif state == 2:
+                gvd.add_edge((pos.x, pos.y))
+                input(f'??{ref}')
+                U_grad = ref
+
+
+
+            if len(similars) > 1:
+                print(similars)
+                #input('MUITO OBS')
+            print('diss', D)
             print('normal', test2)
             #if state == 0 and np.linalg.norm(U_grad) <= 0.1:
-            if state == 0 and len(similars)>0:
-                if obstacle_num >= 3:
-                    pass
+            #if state == 0 and len(similars)>0:
+            #    if obstacle_num >= 3:
+            #        pass
             #        change_state(2)
             #        input('changed state')
             #        eigenv = np.linalg.eig(hessian)[1]
@@ -869,21 +934,21 @@ def run():
             #        gvd.add_meetpoint((pos.x, pos.y), eigenv[:, 1])
             #        vec = -eigenv[:, 0]
             #        U_grad = 5* (rot90 @ vec.reshape(-1, 1)).ravel()
-                else:
-                    change_state(1)
-                    input('changed state')
-                    tangent = (rot90 @ gradd.reshape(-1, 1)).ravel()
-                    set_tan_ang(tangent)
-                    #print('tangent', tangent, np.linalg.norm(tangent))
-                    U_grad = tangent
-                    #input('going tangent ')
-            elif state == 1:
-                if not similars:
-                    change_state(0)
-                    input('changed state')
-                else:
-                    U_grad = tangent
-            
+            #    else:
+            #        change_state(1)
+            #        input('changed state')
+            #        tangent = (rot90 @ gradd.reshape(-1, 1)).ravel()
+            #        set_tan_ang(tangent)
+            #        #print('tangent', tangent, np.linalg.norm(tangent))
+            #        U_grad = tangent
+            #        #input('going tangent ')
+            #elif state == 1:
+            #    if not similars:
+            #        change_state(0)
+            #        input('changed state')
+            #    else:
+            #        U_grad = tangent
+            #
             #elif state == 2:
             #    if obstacle_num < 3:
             #        change_state(0)
@@ -894,13 +959,13 @@ def run():
             if len(similars) > 0:
                 print('state', state)
                 print('regions', regions)
-                print('Distances', diff_D)
+                print('Distances', D)
                 print('Similars idxs', similars)
                 print('gradd', gradd)
                 print('normal queu', normal_queue)
-                input('CANCELLING')
+                #input('CANCELLING')
             if obstacle_num >= 3:
-                #print(f'diff D: {diff_D}')
+                #print(f'diff D: {D}')
                 #print(f'kkk: {kkk}')
                 print(f'gradlist: {grad_list}')
                 print(f'Cancelling potentials =  {equi2}')
