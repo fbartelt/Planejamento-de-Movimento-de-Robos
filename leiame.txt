@@ -2,24 +2,22 @@ Para uma descrição mais detalhada, leia o README em https://github.com/fbartel
 
 Esse arquivo assume que o comando `catkin_make` já foi executado, assim como os comandos `source catkin_ws/devel/setup` necessários. Ele também assume que o `roscore` está em execução.
 
-Os scripts em python para o Tangent Bug, Potential Function e Wave-Front assumem a existência de dois robôs no simulador Stage (arquivo .world), o primeiro, um quadrado verde, é o robô a ser controlado e o segundo, o quadrado laranja, a representação do objetivo. Então se qualquer outro mapa for usado, que não tenha dois robôs nessa ordem específica, o usuário deverá alterar os Publishers e Subscribers rospy em cada um desses scripts.
+Os scripts em python para o A*, e RRT assumem a existência de dois robôs no simulador Stage (arquivo .world), o primeiro, um quadrado verde, é o robô a ser controlado e o segundo, o quadrado laranja, a representação do objetivo. Então se qualquer outro mapa for usado, que não tenha dois robôs nessa ordem específica, o usuário deverá alterar os Publishers e Subscribers rospy em cada um desses scripts.
 
-Path Following e Wave-Front não vão alterar de comportamento simplesmente com uma mudança de mapa, para isso, é necessário alterar parâmetros definidos internamente nos scripts, com referência ao mapa diferente a ser utilizado. Para o Path FOllowing, a curva parametrizada é definida internamente. Já o Wave-Front requer o mapa de configurações e dimensões do mapa e robô, assim como sua posição inicial, definidos internamente.
+A*, RRT e Coverage não vão alterar de comportamento simplesmente com uma mudança de mapa, para isso, é necessário alterar parâmetros definidos internamente nos scripts, com referência ao mapa diferente a ser utilizado, assim como seus respectivos grids
 
-Em ordem os scripts necessários para executar o Tangent Bug, Path FOllowing, Pontential Function e Wave-Front são tangent_bug_alg.py, path_following.py, potential_function.py e wavefront.py. Para todos esses algoritmos, implementou-se arquivos .launch para facilitar a execução, porém caso por algum motivo não seja possível executar os .launch, é também indicado como executar cada algoritmo manualmente.
+Em ordem os scripts necessários para executar o A*, GVD, Coverage e RRT são Astar.py, GVD.py, coverage.py e RRT.py. Para todos esses algoritmos, implementou-se arquivos .launch para facilitar a execução, porém caso por algum motivo não seja possível executar os .launch, é também indicado como executar cada algoritmo manualmente.
 
 
-### Tangent Bug
+### Astar
 
 Por padrão, assume-se que o mapa a ser utilizado é ./catkin_ws/src/tangent_bug/worlds/maze.world. Se qualquer outro mapa for utilizado, será necessário ou alterar o aqruivo .launch ou rodar manualmente.
 
-Rodar com os argumentos e mapa padrão implica que o objetivo, quadrado laranja, está em (4, 2) e que o robô está inicialmente em (-6, 2). Quando esse objetivo é alcançado, é possível mover o robô com o mouse e enviar "y" para o terminal, de forma que se torna possível rodar o algoritmo novamente, com o MESMO ponto objetivo, porém com outra configuração inicial do robô.
-
-O algoritmo deve reconhecer que é impossível alcançar o objetivo, porém em alguns cenários ele não funciona como o esperado. Portanto, recomenda-se utilizar o parâmetro `goal:="0 -11"`, utilizando a posição inicial padrão do robô, para testar esse funcionamento.
+Rodar com os argumentos e mapa padrão implica que o objetivo, quadrado laranja, está em (5, 2) e que o robô está inicialmente em (-6, 2).
 
 #### Launch File
 
-É possível rodar o algoritmo com o arquivo ./catkin_ws/src/tangent_bug/launch/tangent_bug.launch). Existem parâmetros opcionais `goal` que corresponde às coordenadas do objetivo, em metros, como "x_goal y_goal", pro padrão `goal:="4 2"`.
+É possível rodar o algoritmo com o arquivo ./catkin_ws/src/Astar/launch/Astar.launch). Existem parâmetros opcionais `goal` que corresponde às coordenadas do objetivo, em metros, como "x_goal y_goal", pro padrão `goal:="5 2"`.
 
 Para rodar com os argumentos padrões, simplesmente rode em um terminal:
 
@@ -38,34 +36,32 @@ roslaunch potential_function potential_function.launch goal:="0 -10"
 Em um terminal, rode:
 
 ```
-roscd tangent_bug
+roscd Astar
 rosrun stage_ros stageros worlds/maze.world 
 ```
 
 Em um outro terminal, execute:
 
 ```
-rosrun tangent_bug tangent_bug_alg.py x y
+rosrun Astar Astar.py x y 4
 ```
 
 onde `x` é a coordenata x do objetivo em metros, e `y` a coordenada y do objetivo em metros.
 
 
 
-### Path Following
+### GVD
 
-Por padrão o mapa é assumido como ./catkin_ws/src/path_following/worlds/empty.world). Caso outro mapa seja utilizado, ou se deve alterar o arquivo .launch ou rodar manualmente, assim como alterar a definção da curva parametrizada no script correspondente.
-
-O padrão implica que a curva parametrizada é uma rosa polar com 8 pétalas
+Por padrão o mapa é assumido como ./catkin_ws/src/GVD/worlds/gvd.world). Caso outro mapa seja utilizado, ou se deve alterar o arquivo .launch ou rodar manualmente.
 
 #### Launch File
 
-É possível rodar o algoritmo com o arquivo ./catkin_ws/src/path_following/launch/path_following.launch.
+É possível rodar o algoritmo com o arquivo ./catkin_ws/src/GVD/launch/GVD.launch.
 
 Simplesmente, execute em um terminal:
 
 ``` 
-roslaunch path_following path_following.launch
+roslaunch GVD GVD.launch
 ```
 
 #### Running Manually
@@ -73,38 +69,30 @@ roslaunch path_following path_following.launch
 Execute em um terminal:
 
 ``` 
-roscd path_following
-rosrun stage_ros stageros worlds/empty.world 
+roscd GVD
+rosrun stage_ros stageros worlds/gvd.world 
 ```
 
 Em outro terminal, execute:
 
 ``` 
-rosrun path_following path_following.py
+rosrun GVD GVD.py
 ```
 
 
 
-### Potential Function
+### Coverage
 
-Por padrão o mapa é assumido como ./catkin_ws/src/potential_function/worlds/maze.world. Qualquer outro mapa requer as mesmas alterações que para os outros algoritmos
-
-Rodar com os parâmetros padrão implica que o objetivo, quadrado laranja, é o ponto (5, 2) e que a posição inicial do robô é (-2, -4). Quando esse objetivo é alcançado, é possível mover o robô com o mouse e enviar "y" para o terminal, de forma que se torna possível rodar o algoritmo novamente, com o MESMO ponto objetivo, porém com outra configuração inicial do robô.
+Por padrão o mapa é assumido como ./catkin_ws/src/coverage/worlds/trapz2.world. Qualquer outro mapa requer as mesmas alterações que para os outros algoritmos, assim como o arquivo trapz2.pickle, que contém uma lista dos nodos que representam as células da decomposição trapezoidal.
 
 #### Launch File
 
-É possível executar o algoritmo com o arquivo ./catkin_ws/src/potential_function/launch/potential_function.launch. Existem os parâmetros opcionais `goal`, as coordenadas do objetivoem metros como "x_goal y_goal", por padrão `goal:="5 2"`.
+É possível executar o algoritmo com o arquivo ./catkin_ws/src/coverage/launch/coverage.launch. 
 
-Para executar com os argumentos padrão, simplesmente execute em um terminal:
-
-``` 
-roslaunch potential_function potential_function.launch
-```
-
-Para executar com parâmetros diferentes, execute:
+Simplesmente execute em um terminal:
 
 ``` 
-roslaunch potential_function potential_function.launch goal:="-6 -2"
+roslaunch coverage coverage.launch
 ```
 
 #### Running Manually
@@ -112,46 +100,40 @@ roslaunch potential_function potential_function.launch goal:="-6 -2"
 Em um terminal, execute:
 
 ``` 
-roscd potential_function
-rosrun stage_ros stageros worlds/maze.world 
+roscd coverage
+rosrun stage_ros stageros worlds/trapz2.world 
 ```
 
 Em outro terminal, execute:
 
 ``` 
-rosrun potential_function potential_function.py x y
+rosrun coverage coverage.py
 ```
 
-onde `x` é a coordenada x do objetivo, e  `y` sua coordenada y.
+### RRT
 
+O algoritmo RRT depende de um grid, feito a priori, que corresponde à expansão dos obstáculos com dimensões do robô, uma aproximação do espaço de configuraçoes. Dessa forma, caso outro mapa que não seja o padrão seja utilizado, é necessário criar essa nova grid e alterar o script .py do algoritmo. Para gerar essa grid, é possível utilizar o script, adicionado a parte, ./catkin_ws/src/wavefront/scripts/map_expander.py, alterando-o conforme necessário.
 
-
-### Wave-Front
-
-O algoritmo Wave-Front depende de um grid, feito a priori, que corresponde à expansão dos obstáculos com dimensões do robô, uma aproximação do espaço de configuraçoes. Dessa forma, caso outro mapa que não seja o padrão seja utilizado, é necessário criar essa nova grid e alterar o script .py do algoritmo. Para gerar essa grid, é possível utilizar o script, adicionado a parte, ./catkin_ws/src/wavefront/scripts/map_expander.py, alterando-o conforme necessário.
-
-Por padrão, assume-se o mapa ./catkin_ws/src/wavefront/worlds/maze.world e seu respectivo espaço de configurações ./catkin_ws/src/wavefront/worlds/grid1.npy.
-
-A posição inicial do robô DEVE ser fornecida dentro de wavefront.py. 
+Por padrão, assume-se o mapa ./catkin_ws/src/RRT/worlds/maze.world e seu respectivo grid ./catkin_ws/src/RRT/worlds/grid1.npy. 
 
 Por padrão, a posição inicial do robô é (-6, 2) e o objetivo é (5, 2)
 
 #### Launch File
 
-É possível executar o algoritmo por ./catkin_ws/src/wavefront/launch/wavefront.launch. Existem dois parâmetros opcionais `goal` e `neighbors`. `goal` são as coordenadas do objetivo em metros, como `"x_goal y_goal"`, e `neighbors` é o número de conectividade de pontos. Caso o número informado seja diferente de 4, é assumido conectividade de 8 pontos.
+É possível executar o algoritmo por ./catkin_ws/src/RRT/launch/RRT.launch. Existe um parâmetros opcional `goal`, que são as coordenadas do objetivo em metros, como `"x_goal y_goal"`.
 
-Os argumentos padrão são `goal:="5 2"` e `neighbors:="4"`.
+Os argumentos padrão são `goal:="5 2"`.
 
 Para executar como os parâmetros padrão:
 
 ``` 
-roslaunch wavefront wavefront.launch
+roslaunch RRT RRT.launch
 ```
 
 Executar com parâmetros diferentes:
 
 ``` 
-roslaunch wavefront wavefront.launch goal:="-6 -2" neighbors:="8"
+roslaunch RRT RRT.launch goal:="-6 -2"
 ```
 
 #### Running Manually
@@ -159,17 +141,17 @@ roslaunch wavefront wavefront.launch goal:="-6 -2" neighbors:="8"
 Em um terminal execute:
 
 ``` 
-roscd wavefront
+roscd RRT
 rosrun stage_ros stageros worlds/maze.world 
 ```
 
 Em outro terminal execute:
 
 ``` 
-rosrun wavefront wavefront.py x y n 
+rosrun RRT RRT.py x y
 ```
 
-onde `x` é coordenada x do objetivo, `y` a coordenada y, e `n` é o número de conectividade.
+onde `x` é coordenada x do objetivo, `y` a coordenada y.
 
 ## References
 

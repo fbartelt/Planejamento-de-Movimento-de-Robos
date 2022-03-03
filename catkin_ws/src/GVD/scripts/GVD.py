@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 from collections import deque
-
-from sympy import closest_points
 import rospy
 import tf2_ros as tf2
 #import tf_conversions
@@ -12,8 +10,7 @@ from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 from functools import reduce
 import math
-import pandas as pd
-import pickle
+#import pickle
 import numpy as np
 
 #User defined
@@ -400,8 +397,8 @@ def obstacle_tangent_normal(region):
         reg_idx = np.r_[np.array(reg_idx), idxs]
 
     oi_mat = get_oi_coord(reg_idx)
-    df = pd.DataFrame(oi_mat)
-    df.to_csv('/home/fbartelt/Documents/UFMG/Planejamento/logs/GVD.csv')
+    #df = pd.DataFrame(oi_mat)
+    #df.to_csv('/home/fbartelt/Documents/UFMG/Planejamento/logs/GVD.csv')
     #print('SAVED')
     pos_vec = np.array([pos.x, pos.y])
     norm_mat = np.linalg.norm(pos_vec - oi_mat, axis=1) ** 2
@@ -989,9 +986,9 @@ def run():
         twist.linear.x = v
         twist.angular.z = w
         pub.publish(twist)
-        if counter != 0 and counter % 100 == 0:
-            with open('/home/fbartelt/Documents/UFMG/Planejamento/logs/GVD.pickle', 'wb') as handle:
-                pickle.dump(gvd, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        #if counter != 0 and counter % 100 == 0:
+        #    with open('/home/fbartelt/Documents/UFMG/Planejamento/logs/GVD.pickle', 'wb') as handle:
+        #        pickle.dump(gvd, handle, protocol=pickle.HIGHEST_PROTOCOL)
                 #print('\n'*4+'PICKLEEEEEEEEEEEEEEEE'+'\n'*2)
             #input('pickled')
 

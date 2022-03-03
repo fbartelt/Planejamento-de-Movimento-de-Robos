@@ -56,7 +56,7 @@ CMAKE_BUILD_TYPE:STRING=
 CMAKE_COLOR_MAKEFILE:BOOL=ON
 
 //CXX compiler
-CMAKE_CXX_COMPILER:FILEPATH=/sbin/c++
+CMAKE_CXX_COMPILER:STRING=/sbin/c++
 
 //A wrapper around 'ar' adding the appropriate '--plugin' option
 // for the GCC compiler
@@ -82,7 +82,7 @@ CMAKE_CXX_FLAGS_RELEASE:STRING=-O3 -DNDEBUG
 CMAKE_CXX_FLAGS_RELWITHDEBINFO:STRING=-O2 -g -DNDEBUG
 
 //C compiler
-CMAKE_C_COMPILER:FILEPATH=/sbin/cc
+CMAKE_C_COMPILER:STRING=/sbin/cc
 
 //A wrapper around 'ar' adding the appropriate '--plugin' option
 // for the GCC compiler
@@ -518,7 +518,7 @@ CMAKE_CACHE_MAJOR_VERSION:INTERNAL=3
 //Minor version of cmake used to create the current loaded cache
 CMAKE_CACHE_MINOR_VERSION:INTERNAL=22
 //Patch version of cmake used to create the current loaded cache
-CMAKE_CACHE_PATCH_VERSION:INTERNAL=0
+CMAKE_CACHE_PATCH_VERSION:INTERNAL=2
 //ADVANCED property for variable: CMAKE_COLOR_MAKEFILE
 CMAKE_COLOR_MAKEFILE-ADVANCED:INTERNAL=1
 //Path to CMake executable.
@@ -617,7 +617,7 @@ CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_NM
 CMAKE_NM-ADVANCED:INTERNAL=1
 //number of local generators
-CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=7
+CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=3
 //ADVANCED property for variable: CMAKE_OBJCOPY
 CMAKE_OBJCOPY-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_OBJDUMP
@@ -629,7 +629,7 @@ CMAKE_RANLIB-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_READELF
 CMAKE_READELF-ADVANCED:INTERNAL=1
 //Path to CMake installation.
-CMAKE_ROOT:INTERNAL=/usr/share/cmake-3.22
+CMAKE_ROOT:INTERNAL=/usr/share/cmake
 //ADVANCED property for variable: CMAKE_SHARED_LINKER_FLAGS
 CMAKE_SHARED_LINKER_FLAGS-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_SHARED_LINKER_FLAGS_DEBUG
@@ -663,9 +663,9 @@ CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
 //Details about finding PY_em
 FIND_PACKAGE_MESSAGE_DETAILS_PY_em:INTERNAL=[/usr/lib/python3.9/site-packages/em.py][v()]
 //Details about finding Python
-FIND_PACKAGE_MESSAGE_DETAILS_Python:INTERNAL=[/sbin/python3.9][cfound components: Interpreter ][v3.9.9()]
+FIND_PACKAGE_MESSAGE_DETAILS_Python:INTERNAL=[/sbin/python3.10][cfound components: Interpreter ][v3.10.2()]
 //Details about finding PythonInterp
-FIND_PACKAGE_MESSAGE_DETAILS_PythonInterp:INTERNAL=[/sbin/python3][v3.9.9(3)]
+FIND_PACKAGE_MESSAGE_DETAILS_PythonInterp:INTERNAL=[/sbin/python3][v3.10.2(3)]
 //Details about finding Threads
 FIND_PACKAGE_MESSAGE_DETAILS_Threads:INTERNAL=[TRUE][v()]
 GMOCK_FROM_SOURCE_FOUND:INTERNAL=TRUE
@@ -683,12 +683,12 @@ PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1
 //This needs to be in PYTHONPATH when 'setup.py install' is called.
 //  And it needs to match.  But setuptools won't tell us where
 // it will install things.
-PYTHON_INSTALL_DIR:INTERNAL=lib/python3.9/site-packages
+PYTHON_INSTALL_DIR:INTERNAL=lib/python3.10/site-packages
 //Path to a program.
-_Python_EXECUTABLE:INTERNAL=/sbin/python3.9
+_Python_EXECUTABLE:INTERNAL=/sbin/python3.10
 //Python Properties
-_Python_INTERPRETER_PROPERTIES:INTERNAL=Python;3;9;9;64;;cpython-39-x86_64-linux-gnu;/usr/lib/python3.9;/usr/lib/python3.9;/usr/lib/python3.9/site-packages;/usr/lib/python3.9/site-packages
-_Python_INTERPRETER_SIGNATURE:INTERNAL=3bc36eee74994cb8d4968149e531a71b
+_Python_INTERPRETER_PROPERTIES:INTERNAL=Python;3;10;2;64;;cpython-310-x86_64-linux-gnu;/usr/lib/python3.10;/usr/lib/python3.10;/usr/lib/python3.10/site-packages;/usr/lib/python3.10/site-packages
+_Python_INTERPRETER_SIGNATURE:INTERNAL=a9c1151cabd0fb147793053e60b37cf3
 cmake_package_name:INTERNAL=GTest
 //ADVANCED property for variable: gmock_build_tests
 gmock_build_tests-ADVANCED:INTERNAL=1

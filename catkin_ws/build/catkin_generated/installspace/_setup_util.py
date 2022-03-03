@@ -62,7 +62,7 @@ ENV_VAR_SUBFOLDERS = {
     'LD_LIBRARY_PATH' if not IS_DARWIN else 'DYLD_LIBRARY_PATH': 'lib',
     'PATH': PATH_TO_ADD_SUFFIX,
     'PKG_CONFIG_PATH': os.path.join('lib', 'pkgconfig'),
-    'PYTHONPATH': 'lib/python3.9/site-packages',
+    'PYTHONPATH': 'lib/python3.10/site-packages',
 }
 
 

@@ -13,7 +13,7 @@ try:
 except ImportError:
     # search for catkin package in all workspaces and prepend to path
     for workspace in '/home/fbartelt/Documents/UFMG/Planejamento/catkin_ws/devel;/opt/ros/noetic'.split(';'):
-        python_path = os.path.join(workspace, 'lib/python3.9/site-packages')
+        python_path = os.path.join(workspace, 'lib/python3.10/site-packages')
         if os.path.isdir(os.path.join(python_path, 'catkin')):
             sys.path.insert(0, python_path)
             break
